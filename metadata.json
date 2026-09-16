@@ -1,0 +1,6 @@
+{
+  "name": "EarlyAlert",
+  "description": "Predictive Student Dropout Detection & Intervention System with Neo-Brutalist styling and staff/student views.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

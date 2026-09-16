@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Public Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #F5F1E8;
+    color: #0D0D0D;
+  }
+}
+
+/* Neo-Brutalist utility classes */
+.neo-card {
+  background-color: #FFFFFF;
+  border: 3px solid #0D0D0D;
+  box-shadow: 5px 5px 0px #0D0D0D;
+  border-radius: 0px;
+}
+
+.neo-card-sm {
+  background-color: #FFFFFF;
+  border: 2px solid #0D0D0D;
+  box-shadow: 3px 3px 0px #0D0D0D;
+  border-radius: 0px;
+}
+
+.neo-btn {
+  border: 3px solid #0D0D0D;
+  box-shadow: 4px 4px 0px #0D0D0D;
+  border-radius: 0px;
+  font-weight: 700;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.neo-btn:hover {
+  filter: brightness(0.97);
+}
+
+.neo-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0px #0D0D0D;
+}
+
+.neo-input {
+  background-color: #FFFFFF;
+  border: 3px solid #0D0D0D;
+  box-shadow: 3px 3px 0px #0D0D0D;
+  border-radius: 0px;
+  color: #0D0D0D;
+  font-weight: 500;
+}
+
+.neo-input:focus {
+  outline: none;
+  background-color: #FFFDF5;
+  box-shadow: 4px 4px 0px #0D0D0D;
+}
