@@ -16,7 +16,7 @@ interface EarlyAlertContextType {
   setUploadHistory: React.Dispatch<React.SetStateAction<UploadLog[]>>;
   detailsMap: Record<string, StudentDetail>;
   fetchStudentDetail: (id: string) => Promise<StudentDetail | null>;
-  handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => void;
+  handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
   handleClearAllData: () => void;
   handleDeleteUpload: (uploadedAt: string) => void;
   handleInterventionAssigned: (payload: MentorActionPayload) => Promise<void>;
@@ -88,14 +88,15 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
     return null;
   };
 
-  const handleDataUpload = async (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => {
+  const handleDataUpload = (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string): { success: boolean; updatedCount: number; skippedCount: number } => {
     const newDetails = { ...detailsMap };
     const newStudents = [...students];
     let updatedCount = 0;
+    let skippedCount = 0;
 
     parsedData.forEach(row => {
       const sid = row.studentId?.trim();
-      if (!sid) return;
+      if (!sid) { skippedCount++; return; }
 
       if (!newDetails[sid]) {
         const name = row.name?.trim() || sid;
@@ -169,16 +170,20 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
     const newLog: UploadLog = {
       uploadedAt: new Date().toISOString(),
       fileName: fileName || `dataset_${uploadType}.csv`,
-      dataType: uploadType === 'overall' ? 'Attendance & Grades' : uploadType === 'fee' ? 'Fee Defaulters' : 'Backlog Data',
-      recordsProcessed: updatedCount,
+      week: weekLabel,
+      type: uploadType,
+      studentsUpdated: updatedCount,
+      uploadedBy: 'Mentor',
       status: 'Success'
-    };
+    } as UploadLog & { status: string };
     
     setUploadHistory(prev => [newLog, ...prev]);
     fetch('/api/history', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newLog)
     });
+
+    return { success: true, updatedCount, skippedCount };
   };
 
   const handleClearAllData = async () => {
