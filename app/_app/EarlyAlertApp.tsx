@@ -46,9 +46,19 @@ export default function App() {
 
   const [isClient, setIsClient] = useState(false);
 
-  // Load from MongoDB on mount
+  // Load from MongoDB on mount + restore student session
   useEffect(() => {
     setIsClient(true);
+    // Restore student selection if logged in as student
+    try {
+      const savedAuth = localStorage.getItem('ea_authUser');
+      if (savedAuth) {
+        const u = JSON.parse(savedAuth);
+        if (u.role === 'student' && u.studentId) {
+          setSelectedStudentId(u.studentId);
+        }
+      }
+    } catch {}
     const fetchData = async () => {
       try {
         const [histRes, studRes] = await Promise.all([
@@ -78,15 +88,42 @@ export default function App() {
     }
   }, [selectedStudentId]);
 
-  // Auth State
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  // Auth State — persisted in localStorage so login survives refresh
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const saved = localStorage.getItem('ea_authUser');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
 
-  // Active Role and Navigation Screen
-  const [role, setRole] = useState<Role>('mentor');
-  const [currentScreen, setCurrentScreen] = useState<ScreenKey>('dashboard');
+  // Active Role and Navigation Screen — derived from authUser
+  const [role, setRole] = useState<Role>(() => {
+    if (typeof window === 'undefined') return 'mentor';
+    try {
+      const saved = localStorage.getItem('ea_authUser');
+      if (saved) {
+        const u = JSON.parse(saved);
+        return u.role === 'student' ? 'student' : 'mentor';
+      }
+    } catch {}
+    return 'mentor';
+  });
+  const [currentScreen, setCurrentScreen] = useState<ScreenKey>(() => {
+    if (typeof window === 'undefined') return 'dashboard';
+    try {
+      const saved = localStorage.getItem('ea_authUser');
+      if (saved) {
+        const u = JSON.parse(saved);
+        return u.role === 'student' ? 'student-view' : 'dashboard';
+      }
+    } catch {}
+    return 'dashboard';
+  });
 
   const handleLogin = (user: AuthUser) => {
     setAuthUser(user);
+    localStorage.setItem('ea_authUser', JSON.stringify(user));
     if (user.role === 'student') {
       setRole('student');
       setSelectedStudentId(user.studentId);
@@ -99,6 +136,7 @@ export default function App() {
 
   const handleLogout = () => {
     setAuthUser(null);
+    localStorage.removeItem('ea_authUser');
     setRole('mentor');
     setCurrentScreen('dashboard');
     setSelectedStudentId('');
@@ -478,34 +516,7 @@ export default function App() {
                   {authUser.role === 'student' ? `${authUser.name} (${authUser.studentId})` : authUser.name}
                 </span>
               </div>
-              {/* Role Switcher — only visible for mentors */}
-              {authUser.role === 'mentor' && (
-                <div className="flex items-center border-2 border-white bg-neutral-900 p-1">
-                  <button
-                    id="mentor-role-toggle-btn"
-                    onClick={() => {
-                      setRole('mentor');
-                      if (currentScreen === 'student-view') setCurrentScreen('dashboard');
-                    }}
-                    className={`px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
-                      role === 'mentor' ? 'bg-[#D62828] text-white' : 'text-neutral-300 hover:text-white'
-                    }`}
-                  >
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Mentor</span>
-                  </button>
-                  <button
-                    id="student-role-toggle-btn"
-                    onClick={() => { setRole('student'); setCurrentScreen('student-view'); }}
-                    className={`px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
-                      role === 'student' ? 'bg-[#2563EB] text-white' : 'text-neutral-300 hover:text-white'
-                    }`}
-                  >
-                    <User className="w-3.5 h-3.5" />
-                    <span>Student</span>
-                  </button>
-                </div>
-              )}
+
               {/* Logout button */}
               <button
                 onClick={handleLogout}

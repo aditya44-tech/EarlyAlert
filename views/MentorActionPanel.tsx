@@ -159,7 +159,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
                 <div className="h-3 bg-neutral-200 w-full rounded"></div>
               </div>
             ) : (
-              <p className="text-sm font-medium text-[#0D0D0D] leading-relaxed">{groqRationale}</p>
+              <p className="text-sm font-medium text-[#0D0D0D] leading-relaxed select-none">{groqRationale}</p>
             )}
           </div>
 
@@ -194,7 +194,8 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
         </div>
       )}
 
-      {/* Main Intervention Form Card */}
+      {/* Main Intervention Form Card — hidden after submission */}
+      {!submittedPayload && (
       <div className="neo-card p-6 md:p-8 bg-white">
         <div className="border-b-2 border-[#0D0D0D] pb-4 mb-6">
           <div className="flex items-center gap-2 mb-1">
@@ -370,6 +371,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
           </div>
         </form>
       </div>
+      )}
     </div>
   );
 };
