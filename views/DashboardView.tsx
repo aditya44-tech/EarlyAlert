@@ -50,7 +50,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [uploadType, setUploadType] = useState<'overall' | 'fee' | 'backlog' | 'subject_wise'>('overall');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isUploadMinimized, setIsUploadMinimized] = useState(false);
+  const [isUploadMinimized, setIsUploadMinimized] = useState(true);
   const [viewingRawData, setViewingRawData] = useState<{ week: string, type: string, data: any[], fileName?: string } | null>(null);
 
   // Unique departments and years
@@ -185,12 +185,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <div className="neo-card p-3.5 md:p-4 bg-white">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-neutral-600">
+            <span className="text-sm font-black uppercase tracking-wider text-neutral-600">
               Monitored
             </span>
             <Users className="w-4 h-4 text-[#0D0D0D]" />
           </div>
-          <div className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1 font-mono">
+          <div className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1">
             {totalCount}
           </div>
           <span className="text-[11px] font-bold text-neutral-500">Total active cohort</span>
@@ -198,12 +198,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="neo-card p-3.5 md:p-4 bg-red-50 text-red-900 border-red-900">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-red-600">
+            <span className="text-sm font-black uppercase tracking-wider text-red-600">
               High Risk
             </span>
             <AlertTriangle className="w-4 h-4 text-red-600" />
           </div>
-          <div className="text-2xl md:text-3xl font-black text-red-700 mt-1 font-mono">
+          <div className="text-2xl md:text-3xl font-black text-red-700 mt-1">
             {highRiskCount}
           </div>
           <span className="text-[11px] font-bold text-red-600">Requires immediate contact</span>
@@ -211,12 +211,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="neo-card p-3.5 md:p-4 bg-[#F4C430] text-[#0D0D0D]">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-neutral-900">
+            <span className="text-sm font-black uppercase tracking-wider text-neutral-900">
               Active Plans
             </span>
             <Activity className="w-4 h-4 text-[#0D0D0D]" />
           </div>
-          <div className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1 font-mono">
+          <div className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1">
             {activeInterventionsCount}
           </div>
           <span className="text-[11px] font-bold text-neutral-800">Support underway</span>
@@ -224,12 +224,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="neo-card p-3.5 md:p-4 bg-white">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-neutral-600">
+            <span className="text-sm font-black uppercase tracking-wider text-neutral-600">
               Avg Cohort Risk
             </span>
             <CheckCircle2 className="w-4 h-4 text-[#2D9D5F]" />
           </div>
-          <div className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1 font-mono">
+          <div className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1">
             {avgRiskScore}
             <span className="text-sm font-sans font-bold text-neutral-400">/100</span>
           </div>
@@ -265,7 +265,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <UploadCloud className="w-5 h-5 text-[#D62828]" />
                     Weekly Data Upload
                   </h3>
-                  <p className="text-xs font-bold text-neutral-600 mt-1">
+                  <p className="text-sm font-bold text-neutral-600 mt-1">
                     Upload CSV with attendance and test scores to update risk profiles.
                   </p>
                 </div>
@@ -274,7 +274,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <select
                     value={uploadType}
                     onChange={(e) => setUploadType(e.target.value as any)}
-                    className="neo-input py-1.5 px-3 text-xs font-bold bg-white"
+                    className="neo-input py-1.5 px-3 text-sm font-bold bg-white"
                   >
                     <option value="overall">Overall Data</option>
                     <option value="fee">Fee Status</option>
@@ -287,10 +287,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       value={weekLabel}
                       onChange={(e) => setWeekLabel(e.target.value)}
                       placeholder="e.g. Week 5"
-                      className="neo-input py-1.5 px-3 text-xs font-bold w-28"
+                      className="neo-input py-1.5 px-3 text-sm font-bold w-28"
                     />
                   )}
-                  <label className="neo-btn px-4 py-2 bg-neutral-800 text-white text-xs font-black uppercase tracking-wider cursor-pointer flex items-center gap-2 hover:bg-black transition-colors">
+                  <label className="neo-btn px-4 py-2 bg-neutral-800 text-white text-sm font-black uppercase tracking-wider cursor-pointer flex items-center gap-2 hover:bg-black transition-colors">
                     <UploadCloud className="w-4 h-4" />
                     <span>{uploadedFile ? 'Change File' : 'Choose CSV'}</span>
                     <input
@@ -309,7 +309,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <button
                       onClick={handleProcessUpload}
                       disabled={isUploading}
-                      className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50"
+                      className="neo-btn px-4 py-2 bg-[#D62828] text-white text-sm font-black uppercase tracking-wider flex items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
                       {isUploading ? (
                         <span className="animate-pulse">Processing...</span>
@@ -328,13 +328,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="flex items-center justify-between mt-2">
                 <div>
                   {uploadedFile && !uploadMessage && (
-                    <span className="text-xs font-bold text-neutral-800 bg-white px-2 py-1 border border-neutral-300">
+                    <span className="text-sm font-bold text-neutral-800 bg-white px-2 py-1 border border-neutral-300">
                       Ready: {uploadedFile.name}
                     </span>
                   )}
                 </div>
                 {uploadMessage && (
-                  <div className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 ${uploadMessage.type === 'success' ? 'bg-[#D4EDDA] text-[#155724] border-[#155724]' : 'bg-[#F8D7DA] text-[#721C24] border-[#721C24]'}`}>
+                  <div className={`flex items-center gap-2 px-3 py-1.5 text-sm font-bold border-2 ${uploadMessage.type === 'success' ? 'bg-[#D4EDDA] text-[#155724] border-[#155724]' : 'bg-[#F8D7DA] text-[#721C24] border-[#721C24]'}`}>
                     {uploadMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                     {uploadMessage.text}
                   </div>
@@ -345,9 +345,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {/* Upload History Table */}
             {groupedHistory.length > 0 && (
               <div className="mt-6 border-t-2 border-[#0D0D0D] pt-4">
-                <h4 className="font-black text-xs uppercase tracking-wider text-[#0D0D0D] mb-3">Recent Uploads (Grouped by Week)</h4>
+                <h4 className="font-black text-sm uppercase tracking-wider text-[#0D0D0D] mb-3">Recent Uploads (Grouped by Week)</h4>
                 <div className="bg-white border-2 border-[#0D0D0D] overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-neutral-100 border-b-2 border-[#0D0D0D] font-black uppercase tracking-wider text-neutral-600">
                         <th className="p-2 border-r-2 border-[#0D0D0D] w-24">Week</th>
@@ -406,16 +406,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-[#0D0D0D] flex items-center gap-2">
-            <span className="w-3 h-3 bg-[#D62828] inline-block border border-[#0D0D0D]" />
-            Flagged Student Cohort ({filteredStudents.length})
-          </h2>
-          <span className="text-xs font-bold text-neutral-500">
-            Click any row to open diagnostic detail
-          </span>
-        </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-[#0D0D0D] flex items-center gap-2">
+          <span className="w-3 h-3 bg-[#D62828] inline-block border border-[#0D0D0D]" />
+          Flagged Student Cohort ({filteredStudents.length})
+        </h2>
+        <span className="text-sm font-bold text-neutral-500">
+          Click any row to open diagnostic detail
+        </span>
+      </div>
 
       {/* Filter and Control Bar */}
       <div className="neo-card p-4 bg-white">
@@ -445,14 +445,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-1.5">
               <Filter className="w-3.5 h-3.5 text-[#0D0D0D]" />
-              <span className="text-xs font-black uppercase tracking-wider text-[#0D0D0D]">
+              <span className="text-sm font-black uppercase tracking-wider text-[#0D0D0D]">
                 Dept:
               </span>
               <select
                 id="dept-filter-select"
                 value={selectedDept}
                 onChange={(e) => setSelectedDept(e.target.value)}
-                className="neo-input py-1.5 px-2.5 text-xs font-bold"
+                className="neo-input py-1.5 px-2.5 text-sm font-bold"
               >
                 {departments.map((dept) => (
                   <option key={dept} value={dept}>
@@ -463,14 +463,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-black uppercase tracking-wider text-[#0D0D0D]">
+              <span className="text-sm font-black uppercase tracking-wider text-[#0D0D0D]">
                 Year:
               </span>
               <select
                 id="year-filter-select"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="neo-input py-1.5 px-2.5 text-xs font-bold"
+                className="neo-input py-1.5 px-2.5 text-sm font-bold"
               >
                 {years.map((yr) => (
                   <option key={yr} value={yr}>
@@ -481,14 +481,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-black uppercase tracking-wider text-[#0D0D0D]">
+              <span className="text-sm font-black uppercase tracking-wider text-[#0D0D0D]">
                 Risk:
               </span>
               <select
                 id="risk-filter-select"
                 value={selectedRisk}
                 onChange={(e) => setSelectedRisk(e.target.value)}
-                className="neo-input py-1.5 px-2.5 text-xs font-bold"
+                className="neo-input py-1.5 px-2.5 text-sm font-bold"
               >
                 <option value="All">All Risks</option>
                 <option value="High">High</option>
@@ -501,7 +501,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               id="sort-risk-toggle-btn"
               onClick={() => setSortAscending((prev) => !prev)}
-              className="neo-btn px-3 py-1.5 bg-[#0D0D0D] text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
+              className="neo-btn px-3 py-1.5 bg-[#0D0D0D] text-white text-sm font-black uppercase tracking-wider flex items-center gap-1.5"
               title="Toggle Risk Score sorting"
             >
               <ArrowDownUp className="w-3.5 h-3.5" />
@@ -512,7 +512,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Active Filter Indicators */}
         {(selectedDept !== 'All' || selectedYear !== 'All' || selectedRisk !== 'All' || searchQuery) && (
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t-2 border-[#0D0D0D] text-xs">
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t-2 border-[#0D0D0D] text-sm">
             <span className="font-extrabold uppercase tracking-wider text-neutral-500">
               Active Filters:
             </span>
@@ -561,7 +561,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <Eye className="w-5 h-5 text-[#D62828]" />
                   Uploaded CSV Data
                 </h3>
-                <p className="text-xs font-bold text-neutral-600">
+                <p className="text-sm font-bold text-neutral-600">
                   {viewingRawData.week} — {viewingRawData.type.replace('_', ' ').toUpperCase()} {viewingRawData.fileName ? `(${viewingRawData.fileName})` : ''}
                 </p>
               </div>
@@ -575,7 +575,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="p-4 overflow-auto bg-white flex-1">
-              <table className="w-full text-left text-xs border-collapse font-mono">
+              <table className="w-full text-left text-sm border-collapse font-mono">
                 <thead>
                   <tr className="bg-neutral-100 border-b-2 border-[#0D0D0D] uppercase font-black text-neutral-800 sticky top-0">
                     {Object.keys(viewingRawData.data[0] || {}).map((key) => (
@@ -601,7 +601,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </tbody>
               </table>
             </div>
-            <div className="p-3 border-t-2 border-[#0D0D0D] bg-neutral-100 flex items-center justify-between text-xs font-bold">
+            <div className="p-3 border-t-2 border-[#0D0D0D] bg-neutral-100 flex items-center justify-between text-sm font-bold">
               <span>Total Rows: {viewingRawData.data.length}</span>
               <button onClick={() => setViewingRawData(null)} className="neo-btn px-4 py-1.5 bg-[#0D0D0D] text-white">
                 Close
@@ -617,7 +617,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {filteredStudents.length === 0 ? (
           <div className="neo-card p-10 text-center bg-white">
             <p className="font-black text-lg text-[#0D0D0D]">No students match your criteria.</p>
-            <p className="text-xs text-neutral-600 mt-1">
+            <p className="text-sm text-neutral-600 mt-1">
               Try adjusting your search filters or clear the active query.
             </p>
             <button
@@ -627,7 +627,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 setSelectedYear('All');
                 setSelectedRisk('All');
               }}
-              className="neo-btn px-4 py-2 bg-[#0D0D0D] text-white text-xs mt-4"
+              className="neo-btn px-4 py-2 bg-[#0D0D0D] text-white text-sm mt-4"
             >
               Clear Filters
             </button>
@@ -635,10 +635,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         ) : (
           <>
             {/* Desktop Table */}
-            <div className="hidden md:block neo-card bg-white overflow-x-auto">
+            <div className="hidden md:block neo-card bg-white overflow-x-auto overflow-y-auto max-h-[60vh]">
               <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#0D0D0D] text-white font-black text-xs uppercase tracking-wider">
+                <thead className="sticky top-0 z-10 shadow-[0_2px_0_#0D0D0D]">
+                  <tr className="bg-[#0D0D0D] text-white font-black text-sm uppercase tracking-wider">
                     <th className="p-3.5 border-r-2 border-neutral-700">ID</th>
                     <th className="p-3.5 border-r-2 border-neutral-700">Student Name</th>
                     <th className="p-3.5 border-r-2 border-neutral-700">Department</th>
@@ -669,7 +669,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Mobile Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:hidden">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:hidden overflow-y-auto max-h-[60vh] pr-1 pb-1">
               {filteredStudents.map((student) => (
                 <StudentCard
                   key={student.studentId}

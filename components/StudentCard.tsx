@@ -29,7 +29,7 @@ export const StudentCard: React.FC<StudentCardProps> = ({ student, onSelect }) =
             {student.riskScore}
             <span className="text-xs text-neutral-500 font-sans">/100</span>
           </div>
-          <span className="text-[10px] font-extrabold uppercase tracking-wide text-neutral-500">
+          <span className="text-xs font-extrabold uppercase tracking-wide text-neutral-500">
             Risk Score
           </span>
         </div>

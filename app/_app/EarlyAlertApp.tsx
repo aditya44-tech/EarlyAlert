@@ -1,12 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import {
-  initialStudents,
-  studentDetailsMap,
-  studentStatusMap,
-  outcomeComparisonsMap,
-} from '@/lib/mockData';
+
 import {
   StudentSummary,
   StudentDetail,
@@ -40,16 +35,12 @@ type Role = 'mentor' | 'student';
 
 export default function App() {
   // Application Data States
-  const [students, setStudents] = useState<StudentSummary[]>(initialStudents);
+  const [students, setStudents] = useState<StudentSummary[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [detailsMap, setDetailsMap] = useState<Record<string, StudentDetail>>(studentDetailsMap);
+  const [detailsMap, setDetailsMap] = useState<Record<string, StudentDetail>>({});
   const [uploadHistory, setUploadHistory] = useState<UploadLog[]>([]);
-  const [studentStatusData, setStudentStatusData] = useState<Record<string, StudentStatusData>>(
-    studentStatusMap
-  );
-  const [outcomeDataMap, setOutcomeDataMap] = useState<Record<string, OutcomeComparisonData>>(
-    outcomeComparisonsMap
-  );
+  const [studentStatusData, setStudentStatusData] = useState<Record<string, StudentStatusData>>({});
+  const [outcomeDataMap, setOutcomeDataMap] = useState<Record<string, OutcomeComparisonData>>({});
 
   const [isClient, setIsClient] = useState(false);
 
