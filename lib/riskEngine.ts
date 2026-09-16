@@ -7,7 +7,7 @@
  * Groq API calls are handled by /api/groq/explain route (key stays server-side).
  */
 
-import { ContributingFactor, RiskLevel } from './types';
+import type { ContributingFactor, RiskLevel } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Raw student data shape (input to the engine)
@@ -59,7 +59,9 @@ function slope(values: number[]): number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function scoreAttendance(history: { week: string; percentage: number }[]) {
-  const vals = history.slice(-4).map(h => h.percentage);
+  const vals = history.slice(-4)
+    .map(h => h.percentage)
+    .filter(v => Number.isFinite(v) && v >= 0 && v <= 100); // ignore invalid entries
   if (vals.length === 0) return { points: 0, reason: 'No attendance data.' };
 
   const latest = vals[vals.length - 1];
@@ -89,7 +91,9 @@ function scoreAttendance(history: { week: string; percentage: number }[]) {
 }
 
 function scoreGrades(history: { test: string; score: number }[]) {
-  const vals = history.slice(-4).map(h => h.score);
+  const vals = history.slice(-4)
+    .map(h => h.score)
+    .filter(v => Number.isFinite(v) && v >= 0 && v <= 100); // ignore invalid entries
   if (vals.length === 0) return { points: 0, reason: 'No grade data.' };
 
   const latest = vals[vals.length - 1];
@@ -130,6 +134,9 @@ function scoreFeeOverdue(overdueDays: number) {
 }
 
 function scoreEngagement(submissionRate: number) {
+  if (!Number.isFinite(submissionRate) || submissionRate < 0 || submissionRate > 100) {
+    return { points: 0, reason: 'Submission rate unavailable or invalid.' };
+  }
   let pts = 0;
   if (submissionRate < 40) pts = 10;
   else if (submissionRate < 55) pts = 7;

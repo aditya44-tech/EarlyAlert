@@ -6,7 +6,8 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --import ./tests/ts-register.mjs --test tests/riskEngine.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",

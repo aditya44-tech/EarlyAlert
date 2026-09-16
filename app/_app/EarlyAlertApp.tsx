@@ -46,31 +46,37 @@ export default function App() {
 
   const [isClient, setIsClient] = useState(false);
 
-  // Load from localStorage on mount
+  // Load from MongoDB on mount
   useEffect(() => {
     setIsClient(true);
-    try {
-      const savedUploads = localStorage.getItem('ea_uploadHistory');
-      if (savedUploads) setUploadHistory(JSON.parse(savedUploads));
-      
-      const savedStudents = localStorage.getItem('ea_students');
-      if (savedStudents) setStudents(JSON.parse(savedStudents));
-      
-      const savedDetails = localStorage.getItem('ea_detailsMap');
-      if (savedDetails) setDetailsMap(JSON.parse(savedDetails));
-    } catch (e) {
-      console.error("Failed to parse local storage data", e);
-    }
+    const fetchData = async () => {
+      try {
+        const [histRes, studRes] = await Promise.all([
+          fetch('/api/history'),
+          fetch('/api/students')
+        ]);
+        if (histRes.ok) setUploadHistory(await histRes.json());
+        if (studRes.ok) setStudents(await studRes.json());
+      } catch (e) {
+        console.error("Failed to fetch data from DB", e);
+      }
+    };
+    fetchData();
   }, []);
 
-  // Save to localStorage on change
+  // Lazy load student details when selected
   useEffect(() => {
-    if (isClient) {
-      localStorage.setItem('ea_uploadHistory', JSON.stringify(uploadHistory));
-      localStorage.setItem('ea_students', JSON.stringify(students));
-      localStorage.setItem('ea_detailsMap', JSON.stringify(detailsMap));
+    if (selectedStudentId && !detailsMap[selectedStudentId]) {
+      fetch(`/api/students/${selectedStudentId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.student) {
+            setDetailsMap(prev => ({ ...prev, [selectedStudentId]: data.student }));
+          }
+        })
+        .catch(console.error);
     }
-  }, [uploadHistory, students, detailsMap, isClient]);
+  }, [selectedStudentId]);
 
   // Auth State
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -281,8 +287,16 @@ export default function App() {
     setDetailsMap(newDetails);
     setStudents(newStudents);
 
+    // Save batch to MongoDB
+    fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.values(newDetails).filter(d => parsedData.some(r => r.studentId === d.studentId)))
+    }).catch(console.error);
+
     if (updatedCount > 0) {
       const log: UploadLog = {
+        id: `upload-${Date.now()}`,
         week: weekLabel,
         type: uploadType,
         uploadedAt: new Date().toISOString(),
@@ -291,6 +305,13 @@ export default function App() {
         rawData: parsedData,
         fileName: fileName,
       };
+      
+      fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...log, date: log.uploadedAt, recordsProcessed: updatedCount })
+      }).catch(console.error);
+
       setUploadHistory(prev => [log, ...prev]);
     }
 
@@ -300,21 +321,24 @@ export default function App() {
 
 
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
     if (confirm('Are you sure you want to reset all data to the initial state? This cannot be undone.')) {
+      await fetch('/api/students', { method: 'DELETE' });
+      await fetch('/api/history', { method: 'DELETE' });
       setStudents([]);
       setDetailsMap({});
       setUploadHistory([]);
       setStudentStatusData({});
       setOutcomeDataMap({});
-      localStorage.removeItem('ea_uploadHistory');
-      localStorage.removeItem('ea_students');
-      localStorage.removeItem('ea_detailsMap');
     }
   };
 
-  const handleDeleteUpload = (uploadedAt: string) => {
+  const handleDeleteUpload = async (uploadedAt: string) => {
     if (confirm('Delete this upload log?')) {
+      const log = uploadHistory.find(l => l.uploadedAt === uploadedAt);
+      if (log?.id) {
+        await fetch(`/api/history?id=${log.id}`, { method: 'DELETE' });
+      }
       setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
     }
   };
@@ -336,70 +360,70 @@ export default function App() {
   };
 
   // Assign intervention submission handler
-  const handleInterventionAssigned = (payload: MentorActionPayload) => {
-    // 1. Update students summary list
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.studentId === payload.studentId ? { ...s, interventionStatus: 'Active' } : s
-      )
-    );
+  const handleInterventionAssigned = async (payload: MentorActionPayload) => {
+    const activeIntervention = {
+      type: payload.type,
+      details: payload.details,
+      status: 'Active',
+      assignedDate: payload.startDate,
+    };
 
-    // 2. Update student status map for Screen 4
+    // Optimistic UI Updates
+    setStudents((prev) =>
+      prev.map((s) => s.studentId === payload.studentId ? { ...s, interventionStatus: 'Active' } : s)
+    );
+    setDetailsMap(prev => ({
+      ...prev,
+      [payload.studentId]: {
+        ...prev[payload.studentId],
+        interventionStatus: 'Active',
+        activeIntervention
+      }
+    }));
     setStudentStatusData((prev) => ({
       ...prev,
       [payload.studentId]: {
         studentId: payload.studentId,
         name: currentDetail?.name ?? '',
-        activeIntervention: {
-          type: payload.type,
-          details: payload.details,
-          status: 'Active',
-          assignedDate: payload.startDate,
-        },
+        activeIntervention
       },
     }));
 
-    // 3. Update outcome comparison baseline/current for Screen 5
-    setOutcomeDataMap((prev) => ({
-      ...prev,
-      [payload.studentId]: {
-        studentId: payload.studentId,
-        name: currentDetail?.name ?? '',
-        intervention: {
-          type: payload.type,
-          details: payload.details,
-          startDate: payload.startDate,
-        },
-        baselineScore: currentDetail?.riskScore ?? 0,
-        currentScore: Math.max(15, (currentDetail?.riskScore ?? 0) - 27),
-        scoreDelta: -27,
-        outcome: 'Improving',
-        checkpointDate: '2026-09-15',
-      },
-    }));
+    // Update MongoDB
+    await fetch(`/api/students/${payload.studentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        interventionStatus: 'Active',
+        activeIntervention
+      })
+    });
   };
 
   // Mark resolved handler for Screen 5
-  const handleResolveIntervention = (studentId: string) => {
+  const handleResolveIntervention = async (studentId: string) => {
     setStudents((prev) =>
-      prev.map((s) =>
-        s.studentId === studentId ? { ...s, interventionStatus: 'Resolved' } : s
-      )
+      prev.map((s) => s.studentId === studentId ? { ...s, interventionStatus: 'Resolved' } : s)
     );
 
-    setStudentStatusData((prev) => {
-      const existing = prev[studentId];
-      if (!existing || !existing.activeIntervention) return prev;
-      return {
-        ...prev,
-        [studentId]: {
-          ...existing,
-          activeIntervention: {
-            ...existing.activeIntervention,
-            status: 'Resolved',
-          },
-        },
-      };
+    setDetailsMap(prev => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        interventionStatus: 'Resolved',
+        activeIntervention: prev[studentId]?.activeIntervention 
+          ? { ...prev[studentId].activeIntervention!, status: 'Resolved' }
+          : undefined
+      }
+    }));
+
+    await fetch(`/api/students/${studentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        interventionStatus: 'Resolved',
+        'activeIntervention.status': 'Resolved'
+      })
     });
   };
 
@@ -495,113 +519,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Screen Breadcrumb Bar (Quick navigation across all 5 requested screens) */}
-        <div className="bg-[#1A1A1A] border-t border-neutral-800 text-xs overflow-x-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="font-extrabold uppercase tracking-wider text-neutral-400 mr-2 text-[11px]">
-                Screens:
-              </span>
-
-              {/* Screen 1 Button */}
-              <button
-                id="nav-screen-1-btn"
-                onClick={() => {
-                  setRole('mentor');
-                  setCurrentScreen('dashboard');
-                }}
-                className={`px-2.5 py-1 font-bold uppercase tracking-wider text-xs border ${
-                  role === 'mentor' && currentScreen === 'dashboard'
-                    ? 'bg-[#F4C430] text-[#0D0D0D] border-white font-black'
-                    : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white'
-                }`}
-              >
-                1. Dashboard
-              </button>
-
-              {/* Screen 2 Button */}
-              <button
-                id="nav-screen-2-btn"
-                onClick={() => {
-                  setRole('mentor');
-                  setCurrentScreen('detail');
-                }}
-                className={`px-2.5 py-1 font-bold uppercase tracking-wider text-xs border ${
-                  role === 'mentor' && currentScreen === 'detail'
-                    ? 'bg-[#F4C430] text-[#0D0D0D] border-white font-black'
-                    : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white'
-                }`}
-              >
-                2. Student Detail
-              </button>
-
-              {/* Screen 3 Button */}
-              <button
-                id="nav-screen-3-btn"
-                onClick={() => {
-                  setRole('mentor');
-                  setCurrentScreen('action');
-                }}
-                className={`px-2.5 py-1 font-bold uppercase tracking-wider text-xs border ${
-                  role === 'mentor' && currentScreen === 'action'
-                    ? 'bg-[#F4C430] text-[#0D0D0D] border-white font-black'
-                    : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white'
-                }`}
-              >
-                3. Action Panel
-              </button>
-
-              {/* Screen 4 Button */}
-              <button
-                id="nav-screen-4-btn"
-                onClick={() => {
-                  setRole('student');
-                  setCurrentScreen('student-view');
-                }}
-                className={`px-2.5 py-1 font-bold uppercase tracking-wider text-xs border ${
-                  role === 'student' && currentScreen === 'student-view'
-                    ? 'bg-[#2563EB] text-white border-white font-black'
-                    : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white'
-                }`}
-              >
-                4. Student View
-              </button>
-
-              {/* Screen 5 Button */}
-              <button
-                id="nav-screen-5-btn"
-                onClick={() => {
-                  setRole('mentor');
-                  setCurrentScreen('outcome');
-                }}
-                className={`px-2.5 py-1 font-bold uppercase tracking-wider text-xs border ${
-                  role === 'mentor' && currentScreen === 'outcome'
-                    ? 'bg-[#F4C430] text-[#0D0D0D] border-white font-black'
-                    : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white'
-                }`}
-              >
-                5. Outcome Comparison
-              </button>
-            </div>
-
-            {/* Active Student Selector Context */}
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[11px] font-bold text-neutral-400">Context Student:</span>
-              <select
-                id="global-student-select"
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="bg-neutral-800 text-white border border-neutral-600 px-2 py-0.5 text-xs font-mono font-bold"
-              >
-                {students.map((s) => (
-                  <option key={s.studentId} value={s.studentId}>
-                    {s.studentId} — {s.name} ({s.riskLevel})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
       </header>
 
       {/* Main Content Viewport */}
@@ -610,12 +527,12 @@ export default function App() {
         {role === 'student' || currentScreen === 'student-view' ? (
           <StudentFacingStatusView
             statusData={currentStudentStatus}
-            allStudents={students.map((s) => ({ studentId: s.studentId, name: s.name }))}
-            onSelectDifferentStudent={(id) => setSelectedStudentId(id)}
-            onSwitchToMentor={() => {
+            allStudents={authUser?.role === 'mentor' ? students.map((s) => ({ studentId: s.studentId, name: s.name })) : []}
+            onSelectDifferentStudent={authUser?.role === 'mentor' ? (id) => setSelectedStudentId(id) : undefined}
+            onSwitchToMentor={authUser?.role === 'mentor' ? () => {
               setRole('mentor');
               setCurrentScreen('dashboard');
-            }}
+            } : undefined}
           />
         ) : currentScreen === 'dashboard' ? (
           <DashboardView 

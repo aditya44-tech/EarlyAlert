@@ -219,7 +219,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             {isGroqPowered && !isAiLoading && (
               <span className="flex items-center gap-1 text-[10px] font-black bg-[#0D0D0D] text-[#F4C430] px-1.5 py-0.5 border border-[#0D0D0D]">
                 <Zap className="w-2.5 h-2.5" />
-                GROQ · llama-3.1-8b-instant
+                GROQ · qwen/qwen3.8-27b
               </span>
             )}
           </div>
@@ -240,7 +240,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             <div className="h-4 bg-neutral-300 w-full"></div>
             <div className="h-4 bg-neutral-300 w-2/3"></div>
             <span className="text-[11px] font-mono text-neutral-500 block pt-1">
-              Connecting to Groq API (llama-3.1-8b-instant)...
+              Connecting to Groq API (qwen/qwen3.8-27b)...
             </span>
           </div>
         ) : (

@@ -46,6 +46,8 @@ export interface StudentDetail {
   year: number;
   riskScore: number;
   riskLevel: RiskLevel;
+  interventionStatus?: InterventionStatus;
+  activeIntervention?: StudentActiveIntervention | null;
   contributingFactors: ContributingFactor[];
   attendanceHistory: AttendanceHistoryItem[];
   gradeHistory: GradeHistoryItem[];
@@ -110,6 +112,7 @@ export interface OutcomeComparisonData {
 export type UploadType = 'overall' | 'fee' | 'backlog' | 'subject_wise';
 
 export interface UploadLog {
+  id?: string;
   week: string;
   type: UploadType;
   uploadedAt: string;
