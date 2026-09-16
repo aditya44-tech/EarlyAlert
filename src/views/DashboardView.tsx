@@ -54,6 +54,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return ['All', ...Array.from(set).sort()];
   }, [students]);
 
+  // Group upload history by week
+  const groupedHistory = useMemo(() => {
+    const groups: Record<string, UploadLog[]> = {};
+    uploadHistory.forEach((log) => {
+      if (!groups[log.week]) groups[log.week] = [];
+      groups[log.week].push(log);
+    });
+    // Sort weeks in descending order, putting 'Initial' at the bottom
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
+      if (a === 'Initial') return 1;
+      if (b === 'Initial') return -1;
+      return b.localeCompare(a, undefined, { numeric: true });
+    });
+    return sortedKeys.map((key) => ({ week: key, logs: groups[key] }));
+  }, [uploadHistory]);
+
   // Filter and sort students
   const filteredStudents = useMemo(() => {
     return students
@@ -89,10 +105,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setUploadMessage({ type: 'error', text: 'Please select a CSV file first.' });
       return;
     }
-    if (!weekLabel.trim()) {
+    const requiresWeek = uploadType === 'overall' || uploadType === 'subject_wise';
+    if (requiresWeek && !weekLabel.trim()) {
       setUploadMessage({ type: 'error', text: 'Please enter a Week label.' });
       return;
     }
+
+    const finalWeekLabel = requiresWeek ? weekLabel : 'Initial';
 
     setIsUploading(true);
     setUploadMessage(null);
@@ -129,14 +148,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }
 
         if (onDataUpload) {
-          const res = onDataUpload(data, weekLabel, uploadType);
+          const res = onDataUpload(data, finalWeekLabel, uploadType);
           if (res.success) {
             setUploadMessage({ type: 'success', text: `Upload successful! ${res.updatedCount} records updated, ${res.skippedCount} skipped.` });
             setUploadedFile(null);
-            // Suggest next week
-            const currentWeekMatch = weekLabel.match(/\d+/);
-            if (currentWeekMatch) {
-              setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
+            // Suggest next week if it uses week labels
+            if (requiresWeek) {
+              const currentWeekMatch = weekLabel.match(/\d+/);
+              if (currentWeekMatch) {
+                setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
+              }
             }
           }
         }
@@ -365,13 +386,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <option value="backlog">Backlogs</option>
                 <option value="subject_wise">Subject-wise</option>
               </select>
-              <input 
-                type="text" 
-                value={weekLabel}
-                onChange={(e) => setWeekLabel(e.target.value)}
-                placeholder="e.g. Week 5"
-                className="neo-input py-1.5 px-3 text-xs font-bold w-28"
-              />
+              {(uploadType === 'overall' || uploadType === 'subject_wise') && (
+                <input 
+                  type="text" 
+                  value={weekLabel}
+                  onChange={(e) => setWeekLabel(e.target.value)}
+                  placeholder="e.g. Week 5"
+                  className="neo-input py-1.5 px-3 text-xs font-bold w-28"
+                />
+              )}
               <label className="neo-btn px-4 py-2 bg-neutral-800 text-white text-xs font-black uppercase tracking-wider cursor-pointer flex items-center gap-2 hover:bg-black transition-colors">
                 <UploadCloud className="w-4 h-4" />
                 <span>{uploadedFile ? 'Change File' : 'Choose CSV'}</span>
@@ -425,14 +448,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Upload History Table */}
-        {uploadHistory && uploadHistory.length > 0 && (
+        {groupedHistory.length > 0 && (
           <div className="mt-6 border-t-2 border-[#0D0D0D] pt-4">
-            <h4 className="font-black text-xs uppercase tracking-wider text-[#0D0D0D] mb-3">Recent Uploads</h4>
+            <h4 className="font-black text-xs uppercase tracking-wider text-[#0D0D0D] mb-3">Recent Uploads (Grouped by Week)</h4>
             <div className="bg-white border-2 border-[#0D0D0D] overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-neutral-100 border-b-2 border-[#0D0D0D] font-black uppercase tracking-wider text-neutral-600">
-                    <th className="p-2 border-r-2 border-[#0D0D0D]">Week</th>
+                    <th className="p-2 border-r-2 border-[#0D0D0D] w-24">Week</th>
                     <th className="p-2 border-r-2 border-[#0D0D0D]">Type</th>
                     <th className="p-2 border-r-2 border-[#0D0D0D]">Uploaded On</th>
                     <th className="p-2 border-r-2 border-[#0D0D0D]">Students Updated</th>
@@ -440,14 +463,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {uploadHistory.map((log, idx) => (
-                    <tr key={idx} className="border-b border-neutral-200 font-bold">
-                      <td className="p-2 border-r-2 border-[#0D0D0D]">{log.week}</td>
-                      <td className="p-2 border-r-2 border-[#0D0D0D] capitalize">{log.type.replace('_', ' ')}</td>
-                      <td className="p-2 border-r-2 border-[#0D0D0D]">{new Date(log.uploadedAt).toLocaleString()}</td>
-                      <td className="p-2 border-r-2 border-[#0D0D0D]">{log.studentsUpdated}</td>
-                      <td className="p-2 text-[#2D9D5F] flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Success</td>
-                    </tr>
+                  {groupedHistory.map((group, groupIdx) => (
+                    <React.Fragment key={groupIdx}>
+                      {group.logs.map((log, idx) => (
+                        <tr key={`${groupIdx}-${idx}`} className={`border-b border-neutral-200 font-bold ${idx === 0 && groupIdx !== 0 ? 'border-t-2 border-[#0D0D0D]' : ''}`}>
+                          {idx === 0 && (
+                            <td className="p-2 border-r-2 border-[#0D0D0D] bg-neutral-50 align-top" rowSpan={group.logs.length}>
+                              {group.week}
+                            </td>
+                          )}
+                          <td className="p-2 border-r-2 border-[#0D0D0D] capitalize">{log.type.replace('_', ' ')}</td>
+                          <td className="p-2 border-r-2 border-[#0D0D0D]">{new Date(log.uploadedAt).toLocaleString()}</td>
+                          <td className="p-2 border-r-2 border-[#0D0D0D]">{log.studentsUpdated}</td>
+                          <td className="p-2 text-[#2D9D5F] flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Success</td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>

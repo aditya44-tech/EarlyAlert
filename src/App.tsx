@@ -39,12 +39,7 @@ export default function App() {
   const [students, setStudents] = useState<StudentSummary[]>(initialStudents);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('S001');
   const [detailsMap, setDetailsMap] = useState<Record<string, StudentDetail>>(studentDetailsMap);
-  const [uploadHistory, setUploadHistory] = useState<UploadLog[]>([
-    { week: 'Week 4', type: 'overall', uploadedAt: '2026-09-15T10:00:00Z', studentsUpdated: 154, uploadedBy: 'System' },
-    { week: 'Week 3', type: 'overall', uploadedAt: '2026-09-08T10:00:00Z', studentsUpdated: 154, uploadedBy: 'System' },
-    { week: 'Week 2', type: 'overall', uploadedAt: '2026-09-01T10:00:00Z', studentsUpdated: 154, uploadedBy: 'System' },
-    { week: 'Week 1', type: 'overall', uploadedAt: '2026-08-25T10:00:00Z', studentsUpdated: 154, uploadedBy: 'System' },
-  ]);
+  const [uploadHistory, setUploadHistory] = useState<UploadLog[]>([]);
   const [studentStatusData, setStudentStatusData] = useState<Record<string, StudentStatusData>>(
     studentStatusMap
   );
