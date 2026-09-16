@@ -132,16 +132,16 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
 
       {/* Success Confirmation Modal / Card if submitted */}
       {submittedPayload && (
-        <div className="neo-card p-6 bg-[#2D9D5F] text-white space-y-4">
+        <div className="neo-card p-6 bg-[#4ADE80] text-[#0D0D0D] space-y-4 border-[3px] border-[#0D0D0D]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#0D0D0D] text-white flex items-center justify-center font-black border-2 border-white">
+            <div className="w-8 h-8 bg-[#0D0D0D] text-white flex items-center justify-center font-black border-2 border-[#0D0D0D]">
               ✓
             </div>
             <div>
-              <h2 className="text-xl font-black uppercase tracking-tight">
+              <h2 className="text-xl font-black uppercase tracking-tight text-[#0D0D0D]">
                 Intervention Assigned Successfully
               </h2>
-              <p className="text-xs text-green-100 font-bold">
+              <p className="text-xs font-bold text-[#0D0D0D]">
                 Payload formatted and recorded for student {studentName} ({studentId}).
               </p>
             </div>

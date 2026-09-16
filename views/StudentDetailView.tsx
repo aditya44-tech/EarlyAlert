@@ -182,28 +182,53 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         </div>
 
         {/* Action Prompt Banner */}
-        <div className="mt-5 p-4 bg-[#FFFDEB] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="space-y-0.5">
-            <span className="text-[11px] font-black uppercase tracking-wider text-neutral-600 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-[#D62828]" />
-              System Recommended Action
-            </span>
-            <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
-              {student.suggestedAction}
+        {hasIntervention ? (
+          <div className="mt-5 p-4 bg-[#4ADE80] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[4px_4px_0px_#0D0D0D]">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#0D0D0D] flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Intervention Assigned
+              </span>
+              <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
+                Active Intervention Plan
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="track-status-btn"
+                onClick={() => onViewInterventions(student.studentId)}
+                className="neo-btn px-4 py-2 bg-white text-[#0D0D0D] text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border-2 border-[#0D0D0D]"
+              >
+                <span>Track Status</span>
+                <ExternalLink className="w-4 h-4" />
+              </button>
             </div>
           </div>
+        ) : (
+          <div className="mt-5 p-4 bg-[#FFFDEB] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-neutral-600 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-[#D62828]" />
+                System Recommended Action
+              </span>
+              <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
+                {student.suggestedAction}
+              </div>
+            </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              id="assign-action-btn"
-              onClick={() => onAssignAction(student.studentId, student.suggestedAction)}
-              className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
-            >
-              <span>Assign This Action</span>
-              <ExternalLink className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                id="assign-action-btn"
+                onClick={() => onAssignAction(student.studentId, student.suggestedAction)}
+                className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
+              >
+                <span>Assign This Action</span>
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Groq AI Diagnostic Explanation Box */}
