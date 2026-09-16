@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   initialStudents,
   studentDetailsMap,
@@ -51,6 +51,34 @@ export default function App() {
     outcomeComparisonsMap
   );
 
+  const [isClient, setIsClient] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    setIsClient(true);
+    try {
+      const savedUploads = localStorage.getItem('ea_uploadHistory');
+      if (savedUploads) setUploadHistory(JSON.parse(savedUploads));
+      
+      const savedStudents = localStorage.getItem('ea_students');
+      if (savedStudents) setStudents(JSON.parse(savedStudents));
+      
+      const savedDetails = localStorage.getItem('ea_detailsMap');
+      if (savedDetails) setDetailsMap(JSON.parse(savedDetails));
+    } catch (e) {
+      console.error("Failed to parse local storage data", e);
+    }
+  }, []);
+
+  // Save to localStorage on change
+  useEffect(() => {
+    if (isClient) {
+      localStorage.setItem('ea_uploadHistory', JSON.stringify(uploadHistory));
+      localStorage.setItem('ea_students', JSON.stringify(students));
+      localStorage.setItem('ea_detailsMap', JSON.stringify(detailsMap));
+    }
+  }, [uploadHistory, students, detailsMap, isClient]);
+
   // Active Role and Navigation Screen
   const [role, setRole] = useState<Role>('mentor');
   const [currentScreen, setCurrentScreen] = useState<ScreenKey>('dashboard');
@@ -85,7 +113,7 @@ export default function App() {
     };
 
   // CSV Upload Handler — uses the deterministic risk engine for consistent scoring
-  const handleDataUpload = (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise') => {
+  const handleDataUpload = (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => {
     let updatedCount = 0;
     let skippedCount = 0;
 
@@ -245,6 +273,8 @@ export default function App() {
         uploadedAt: new Date().toISOString(),
         studentsUpdated: updatedCount,
         uploadedBy: 'System',
+        rawData: parsedData,
+        fileName: fileName,
       };
       setUploadHistory(prev => [log, ...prev]);
     }
@@ -253,6 +283,26 @@ export default function App() {
   };
 
 
+
+
+  const handleClearAllData = () => {
+    if (confirm('Are you sure you want to reset all data to the initial state? This cannot be undone.')) {
+      setStudents([]);
+      setDetailsMap({});
+      setUploadHistory([]);
+      setStudentStatusData({});
+      setOutcomeDataMap({});
+      localStorage.removeItem('ea_uploadHistory');
+      localStorage.removeItem('ea_students');
+      localStorage.removeItem('ea_detailsMap');
+    }
+  };
+
+  const handleDeleteUpload = (uploadedAt: string) => {
+    if (confirm('Delete this upload log?')) {
+      setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
+    }
+  };
 
   // Navigation handlers
   const handleSelectStudent = (studentId: string) => {
@@ -343,6 +393,8 @@ export default function App() {
     Boolean(studentStatusData[selectedStudentId]?.activeIntervention) ||
     Boolean(outcomeDataMap[selectedStudentId]) ||
     students.find((s) => s.studentId === selectedStudentId)?.interventionStatus !== 'None';
+
+  if (!isClient) return null; // Avoid hydration mismatch
 
   return (
     <div className="min-h-screen bg-[#F5F1E8] text-[#0D0D0D] flex flex-col font-sans">
@@ -538,6 +590,8 @@ export default function App() {
             onSelectStudent={handleSelectStudent} 
             uploadHistory={uploadHistory}
             onDataUpload={handleDataUpload}
+            onClearAllData={handleClearAllData}
+            onDeleteUpload={handleDeleteUpload}
           />
         ) : currentScreen === 'detail' && currentDetail ? (
           <StudentDetailView
@@ -578,6 +632,8 @@ export default function App() {
             onSelectStudent={handleSelectStudent} 
             uploadHistory={uploadHistory}
             onDataUpload={handleDataUpload}
+            onClearAllData={handleClearAllData}
+            onDeleteUpload={handleDeleteUpload}
           />
         )}
 

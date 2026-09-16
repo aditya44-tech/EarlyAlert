@@ -115,4 +115,6 @@ export interface UploadLog {
   uploadedAt: string;
   studentsUpdated: number;
   uploadedBy: string;
+  rawData?: any[];
+  fileName?: string;
 }

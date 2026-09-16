@@ -14,14 +14,20 @@ import {
   X,
   UploadCloud,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  Trash2,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 interface DashboardViewProps {
   students: StudentSummary[];
   onSelectStudent: (studentId: string) => void;
   uploadHistory?: UploadLog[];
-  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise') => { success: boolean; updatedCount: number; skippedCount: number };
+  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
+  onClearAllData?: () => void;
+  onDeleteUpload?: (uploadedAt: string) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -29,6 +35,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectStudent,
   uploadHistory = [],
   onDataUpload,
+  onClearAllData,
+  onDeleteUpload,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -36,12 +44,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedRisk, setSelectedRisk] = useState<string>('All');
   const [sortAscending, setSortAscending] = useState(false); // default descending riskScore
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  
+
   // Upload UI State
-  const [weekLabel, setWeekLabel] = useState<string>('Week 5');
+  const [weekLabel, setWeekLabel] = useState<string>('Week 1');
   const [uploadType, setUploadType] = useState<'overall' | 'fee' | 'backlog' | 'subject_wise'>('overall');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isUploadMinimized, setIsUploadMinimized] = useState(false);
+  const [viewingRawData, setViewingRawData] = useState<{ week: string, type: string, data: any[], fileName?: string } | null>(null);
 
   // Unique departments and years
   const departments = useMemo(() => {
@@ -122,7 +132,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       complete: (results) => {
         setIsUploading(false);
         const data = results.data as any[];
-        
+
         // Validate columns
         if (data.length > 0) {
           const firstRow = data[0];
@@ -148,7 +158,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }
 
         if (onDataUpload) {
-          const res = onDataUpload(data, finalWeekLabel, uploadType);
+          const res = onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name);
           if (res.success) {
             setUploadMessage({ type: 'success', text: `Upload successful! ${res.updatedCount} records updated, ${res.skippedCount} skipped.` });
             setUploadedFile(null);
@@ -186,17 +196,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span className="text-[11px] font-bold text-neutral-500">Total active cohort</span>
         </div>
 
-        <div className="neo-card p-3.5 md:p-4 bg-[#D62828] text-white">
+        <div className="neo-card p-3.5 md:p-4 bg-red-50 text-red-900 border-red-900">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black uppercase tracking-wider text-red-100">
+            <span className="text-xs font-black uppercase tracking-wider text-red-600">
               High Risk
             </span>
-            <AlertTriangle className="w-4 h-4 text-white" />
+            <AlertTriangle className="w-4 h-4 text-red-600" />
           </div>
-          <div className="text-2xl md:text-3xl font-black text-white mt-1 font-mono">
+          <div className="text-2xl md:text-3xl font-black text-red-700 mt-1 font-mono">
             {highRiskCount}
           </div>
-          <span className="text-[11px] font-bold text-red-100">Requires immediate contact</span>
+          <span className="text-[11px] font-bold text-red-600">Requires immediate contact</span>
         </div>
 
         <div className="neo-card p-3.5 md:p-4 bg-[#F4C430] text-[#0D0D0D]">
@@ -225,6 +235,175 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <span className="text-[11px] font-bold text-neutral-500">Threshold baseline</span>
         </div>
+      </div>
+
+      {/* Weekly Data Upload Section */}
+      <div className="neo-card p-4 bg-[#F5F1E8] border-2 border-dashed border-[#0D0D0D]">
+        <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-neutral-300">
+          <div className="flex items-center gap-2">
+            <h3 className="font-black text-[#0D0D0D] uppercase tracking-tight flex items-center gap-2">
+              <UploadCloud className="w-5 h-5 text-[#D62828]" />
+              Weekly Data Upload
+            </h3>
+            <button onClick={() => setIsUploadMinimized(!isUploadMinimized)} className="p-1 hover:bg-neutral-200 rounded">
+              {isUploadMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+            </button>
+          </div>
+          {onClearAllData && (
+            <button onClick={onClearAllData} className="neo-btn px-3 py-1 bg-[#D62828] text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:bg-red-700">
+              <Trash2 className="w-3 h-3" /> Reset All Data
+            </button>
+          )}
+        </div>
+
+        {!isUploadMinimized && (
+          <>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-black text-[#0D0D0D] uppercase tracking-tight flex items-center gap-2">
+                    <UploadCloud className="w-5 h-5 text-[#D62828]" />
+                    Weekly Data Upload
+                  </h3>
+                  <p className="text-xs font-bold text-neutral-600 mt-1">
+                    Upload CSV with attendance and test scores to update risk profiles.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={uploadType}
+                    onChange={(e) => setUploadType(e.target.value as any)}
+                    className="neo-input py-1.5 px-3 text-xs font-bold bg-white"
+                  >
+                    <option value="overall">Overall Data</option>
+                    <option value="fee">Fee Status</option>
+                    <option value="backlog">Backlogs</option>
+                    <option value="subject_wise">Subject-wise</option>
+                  </select>
+                  {(uploadType === 'overall' || uploadType === 'subject_wise') && (
+                    <input
+                      type="text"
+                      value={weekLabel}
+                      onChange={(e) => setWeekLabel(e.target.value)}
+                      placeholder="e.g. Week 5"
+                      className="neo-input py-1.5 px-3 text-xs font-bold w-28"
+                    />
+                  )}
+                  <label className="neo-btn px-4 py-2 bg-neutral-800 text-white text-xs font-black uppercase tracking-wider cursor-pointer flex items-center gap-2 hover:bg-black transition-colors">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>{uploadedFile ? 'Change File' : 'Choose CSV'}</span>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          setUploadedFile(e.target.files[0]);
+                          setUploadMessage(null);
+                        }
+                      }}
+                    />
+                  </label>
+                  {uploadedFile && (
+                    <button
+                      onClick={handleProcessUpload}
+                      disabled={isUploading}
+                      className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      {isUploading ? (
+                        <span className="animate-pulse">Processing...</span>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Upload
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* File Selected & Message Feedback */}
+              <div className="flex items-center justify-between mt-2">
+                <div>
+                  {uploadedFile && !uploadMessage && (
+                    <span className="text-xs font-bold text-neutral-800 bg-white px-2 py-1 border border-neutral-300">
+                      Ready: {uploadedFile.name}
+                    </span>
+                  )}
+                </div>
+                {uploadMessage && (
+                  <div className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 ${uploadMessage.type === 'success' ? 'bg-[#D4EDDA] text-[#155724] border-[#155724]' : 'bg-[#F8D7DA] text-[#721C24] border-[#721C24]'}`}>
+                    {uploadMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                    {uploadMessage.text}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Upload History Table */}
+            {groupedHistory.length > 0 && (
+              <div className="mt-6 border-t-2 border-[#0D0D0D] pt-4">
+                <h4 className="font-black text-xs uppercase tracking-wider text-[#0D0D0D] mb-3">Recent Uploads (Grouped by Week)</h4>
+                <div className="bg-white border-2 border-[#0D0D0D] overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-neutral-100 border-b-2 border-[#0D0D0D] font-black uppercase tracking-wider text-neutral-600">
+                        <th className="p-2 border-r-2 border-[#0D0D0D] w-24">Week</th>
+                        <th className="p-2 border-r-2 border-[#0D0D0D]">Type</th>
+                        <th className="p-2 border-r-2 border-[#0D0D0D]">File Name</th>
+                        <th className="p-2 border-r-2 border-[#0D0D0D]">Uploaded On</th>
+                        <th className="p-2 border-r-2 border-[#0D0D0D]">Students Updated</th>
+                        <th className="p-2 border-r-2 border-[#0D0D0D]">Status</th>
+                        <th className="p-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupedHistory.map((group, groupIdx) => (
+                        <React.Fragment key={groupIdx}>
+                          {group.logs.map((log, idx) => (
+                            <tr key={`${groupIdx}-${idx}`} className={`border-b border-neutral-200 font-bold ${idx === 0 && groupIdx !== 0 ? 'border-t-2 border-[#0D0D0D]' : ''}`}>
+                              {idx === 0 && (
+                                <td className="p-2 border-r-2 border-[#0D0D0D] bg-neutral-50 align-top" rowSpan={group.logs.length}>
+                                  {group.week}
+                                </td>
+                              )}
+                              <td className="p-2 border-r-2 border-[#0D0D0D] capitalize">{log.type.replace('_', ' ')}</td>
+                              <td className="p-2 border-r-2 border-[#0D0D0D] text-neutral-600 italic font-mono text-[10px]">{log.fileName || 'N/A'}</td>
+                              <td className="p-2 border-r-2 border-[#0D0D0D]">{new Date(log.uploadedAt).toLocaleString()}</td>
+                              <td className="p-2 border-r-2 border-[#0D0D0D]">{log.studentsUpdated}</td>
+                              <td className="p-2 border-r-2 border-[#0D0D0D]"><div className="text-[#2D9D5F] flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Success</div></td>
+                              <td className="p-2">
+                                {log.rawData && (
+                                  <button
+                                    onClick={() => setViewingRawData({ week: group.week, type: log.type, data: log.rawData!, fileName: log.fileName })}
+                                    className="neo-btn px-2 py-1 bg-white border border-[#0D0D0D] text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:bg-neutral-100"
+                                  >
+                                    <Eye className="w-3 h-3" /> View Data
+                                  </button>
+                                )}
+                                {onDeleteUpload && (
+                                  <button
+                                    onClick={() => onDeleteUpload(log.uploadedAt)}
+                                    className="neo-btn px-2 py-1 bg-[#D62828] border border-[#0D0D0D] text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:bg-red-700 mt-1"
+                                    title="Delete Log"
+                                  >
+                                    <Trash2 className="w-3 h-3" /> Delete
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Filter and Control Bar */}
@@ -361,131 +540,65 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      {/* Weekly Data Upload Section */}
-      <div className="neo-card p-4 bg-[#F5F1E8] border-2 border-dashed border-[#0D0D0D]">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h3 className="font-black text-[#0D0D0D] uppercase tracking-tight flex items-center gap-2">
-                <UploadCloud className="w-5 h-5 text-[#D62828]" />
-                Weekly Data Upload
-              </h3>
-              <p className="text-xs font-bold text-neutral-600 mt-1">
-                Upload CSV with attendance and test scores to update risk profiles.
-              </p>
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-3">
-              <select
-                value={uploadType}
-                onChange={(e) => setUploadType(e.target.value as any)}
-                className="neo-input py-1.5 px-3 text-xs font-bold bg-white"
-              >
-                <option value="overall">Overall Data</option>
-                <option value="fee">Fee Status</option>
-                <option value="backlog">Backlogs</option>
-                <option value="subject_wise">Subject-wise</option>
-              </select>
-              {(uploadType === 'overall' || uploadType === 'subject_wise') && (
-                <input 
-                  type="text" 
-                  value={weekLabel}
-                  onChange={(e) => setWeekLabel(e.target.value)}
-                  placeholder="e.g. Week 5"
-                  className="neo-input py-1.5 px-3 text-xs font-bold w-28"
-                />
-              )}
-              <label className="neo-btn px-4 py-2 bg-neutral-800 text-white text-xs font-black uppercase tracking-wider cursor-pointer flex items-center gap-2 hover:bg-black transition-colors">
-                <UploadCloud className="w-4 h-4" />
-                <span>{uploadedFile ? 'Change File' : 'Choose CSV'}</span>
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  className="hidden" 
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      setUploadedFile(e.target.files[0]);
-                      setUploadMessage(null);
-                    }
-                  }}
-                />
-              </label>
-              {uploadedFile && (
-                <button 
-                  onClick={handleProcessUpload}
-                  disabled={isUploading}
-                  className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 hover:bg-red-700 transition-colors disabled:opacity-50"
-                >
-                  {isUploading ? (
-                    <span className="animate-pulse">Processing...</span>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      Upload
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-          
-          {/* File Selected & Message Feedback */}
-          <div className="flex items-center justify-between mt-2">
-            <div>
-              {uploadedFile && !uploadMessage && (
-                <span className="text-xs font-bold text-neutral-800 bg-white px-2 py-1 border border-neutral-300">
-                  Ready: {uploadedFile.name}
-                </span>
-              )}
-            </div>
-            {uploadMessage && (
-              <div className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold border-2 ${uploadMessage.type === 'success' ? 'bg-[#D4EDDA] text-[#155724] border-[#155724]' : 'bg-[#F8D7DA] text-[#721C24] border-[#721C24]'}`}>
-                {uploadMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                {uploadMessage.text}
+      {/* Raw Data Viewer Modal */}
+      {viewingRawData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="neo-card bg-white w-full max-w-4xl max-h-[80vh] flex flex-col shadow-[8px_8px_0px_#0D0D0D] border-4 border-[#0D0D0D]">
+            <div className="flex items-center justify-between p-4 border-b-4 border-[#0D0D0D] bg-[#F5F1E8]">
+              <div>
+                <h3 className="font-black text-lg uppercase tracking-tight text-[#0D0D0D] flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-[#D62828]" />
+                  Uploaded CSV Data
+                </h3>
+                <p className="text-xs font-bold text-neutral-600">
+                  {viewingRawData.week} — {viewingRawData.type.replace('_', ' ').toUpperCase()} {viewingRawData.fileName ? `(${viewingRawData.fileName})` : ''}
+                </p>
               </div>
-            )}
-          </div>
-        </div>
+              <button
+                onClick={() => setViewingRawData(null)}
+                className="neo-btn p-2 bg-[#D62828] text-white hover:bg-red-700"
+                title="Close Viewer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-        {/* Upload History Table */}
-        {groupedHistory.length > 0 && (
-          <div className="mt-6 border-t-2 border-[#0D0D0D] pt-4">
-            <h4 className="font-black text-xs uppercase tracking-wider text-[#0D0D0D] mb-3">Recent Uploads (Grouped by Week)</h4>
-            <div className="bg-white border-2 border-[#0D0D0D] overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="p-4 overflow-auto bg-white flex-1">
+              <table className="w-full text-left text-xs border-collapse font-mono">
                 <thead>
-                  <tr className="bg-neutral-100 border-b-2 border-[#0D0D0D] font-black uppercase tracking-wider text-neutral-600">
-                    <th className="p-2 border-r-2 border-[#0D0D0D] w-24">Week</th>
-                    <th className="p-2 border-r-2 border-[#0D0D0D]">Type</th>
-                    <th className="p-2 border-r-2 border-[#0D0D0D]">Uploaded On</th>
-                    <th className="p-2 border-r-2 border-[#0D0D0D]">Students Updated</th>
-                    <th className="p-2">Status</th>
+                  <tr className="bg-neutral-100 border-b-2 border-[#0D0D0D] uppercase font-black text-neutral-800 sticky top-0">
+                    {Object.keys(viewingRawData.data[0] || {}).map((key) => (
+                      <th key={key} className="p-2 border-r border-[#0D0D0D]">{key}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedHistory.map((group, groupIdx) => (
-                    <React.Fragment key={groupIdx}>
-                      {group.logs.map((log, idx) => (
-                        <tr key={`${groupIdx}-${idx}`} className={`border-b border-neutral-200 font-bold ${idx === 0 && groupIdx !== 0 ? 'border-t-2 border-[#0D0D0D]' : ''}`}>
-                          {idx === 0 && (
-                            <td className="p-2 border-r-2 border-[#0D0D0D] bg-neutral-50 align-top" rowSpan={group.logs.length}>
-                              {group.week}
-                            </td>
-                          )}
-                          <td className="p-2 border-r-2 border-[#0D0D0D] capitalize">{log.type.replace('_', ' ')}</td>
-                          <td className="p-2 border-r-2 border-[#0D0D0D]">{new Date(log.uploadedAt).toLocaleString()}</td>
-                          <td className="p-2 border-r-2 border-[#0D0D0D]">{log.studentsUpdated}</td>
-                          <td className="p-2 text-[#2D9D5F] flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> Success</td>
-                        </tr>
+                  {viewingRawData.data.map((row, idx) => (
+                    <tr key={idx} className="border-b border-neutral-200 hover:bg-neutral-50">
+                      {Object.values(row).map((val: any, vIdx) => (
+                        <td key={vIdx} className="p-2 border-r border-neutral-300 truncate max-w-[150px]">
+                          {val}
+                        </td>
                       ))}
-                    </React.Fragment>
+                    </tr>
                   ))}
+                  {viewingRawData.data.length === 0 && (
+                    <tr>
+                      <td className="p-4 text-center font-bold" colSpan={10}>No valid rows found in this upload.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+            <div className="p-3 border-t-2 border-[#0D0D0D] bg-neutral-100 flex items-center justify-between text-xs font-bold">
+              <span>Total Rows: {viewingRawData.data.length}</span>
+              <button onClick={() => setViewingRawData(null)} className="neo-btn px-4 py-1.5 bg-[#0D0D0D] text-white">
+                Close
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main Student Data Table (Desktop) & Card List (Mobile) */}
       <div className="space-y-4">
