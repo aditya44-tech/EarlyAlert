@@ -406,6 +406,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
+      
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-[#0D0D0D] flex items-center gap-2">
+            <span className="w-3 h-3 bg-[#D62828] inline-block border border-[#0D0D0D]" />
+            Flagged Student Cohort ({filteredStudents.length})
+          </h2>
+          <span className="text-xs font-bold text-neutral-500">
+            Click any row to open diagnostic detail
+          </span>
+        </div>
+
       {/* Filter and Control Bar */}
       <div className="neo-card p-4 bg-white">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -602,15 +613,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Main Student Data Table (Desktop) & Card List (Mobile) */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-[#0D0D0D] flex items-center gap-2">
-            <span className="w-3 h-3 bg-[#D62828] inline-block border border-[#0D0D0D]" />
-            Flagged Student Cohort ({filteredStudents.length})
-          </h2>
-          <span className="text-xs font-bold text-neutral-500">
-            Click any row to open diagnostic detail
-          </span>
-        </div>
 
         {filteredStudents.length === 0 ? (
           <div className="neo-card p-10 text-center bg-white">
