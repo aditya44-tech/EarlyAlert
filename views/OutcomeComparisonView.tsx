@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { OutcomeComparisonData } from '../types';
+import { OutcomeComparisonData } from '@/lib/types';
 import {
   ArrowLeft,
   ArrowDown,

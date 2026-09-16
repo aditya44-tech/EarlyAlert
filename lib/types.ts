@@ -1,3 +1,7 @@
+/**
+ * lib/types.ts — Shared types (identical to src/types.ts)
+ */
+
 export type RiskLevel = 'Low' | 'Medium' | 'High';
 export type InterventionStatus = 'None' | 'Active' | 'Resolved';
 

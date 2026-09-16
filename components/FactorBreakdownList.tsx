@@ -1,5 +1,5 @@
 import React from 'react';
-import { ContributingFactor } from '../types';
+import { ContributingFactor } from '@/lib/types';
 
 interface FactorBreakdownListProps {
   factors: ContributingFactor[];

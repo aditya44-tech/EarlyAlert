@@ -1,5 +1,5 @@
 import React from 'react';
-import { InterventionStatus } from '../types';
+import { InterventionStatus } from '@/lib/types';
 
 interface InterventionStatusBadgeProps {
   status: InterventionStatus | string;

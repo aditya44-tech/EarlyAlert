@@ -1,0 +1,209 @@
+/**
+ * lib/riskEngine.ts
+ * 
+ * Pure server-side deterministic risk scoring engine.
+ * No browser APIs, no import.meta.env — works in Next.js API routes and server components.
+ * 
+ * Groq API calls are handled by /api/groq/explain route (key stays server-side).
+ */
+
+import { ContributingFactor, RiskLevel } from './types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Raw student data shape (input to the engine)
+// ─────────────────────────────────────────────────────────────────────────────
+export interface RawStudentData {
+  studentId: string;
+  name: string;
+  department: string;
+  year: number;
+  attendanceHistory: { week: string; percentage: number }[];
+  gradeHistory: { test: string; score: number }[];
+  backlogs: number;
+  backlogSubjects: string[];
+  feeOverdueDays: number;
+  submissionRate: number;
+}
+
+export interface RiskResult {
+  riskScore: number;
+  riskLevel: RiskLevel;
+  contributingFactors: ContributingFactor[];
+  dominantFactor: string;
+  suggestedAction: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function clamp(val: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, val));
+}
+
+function slope(values: number[]): number {
+  const n = values.length;
+  if (n < 2) return 0;
+  const xMean = (n - 1) / 2;
+  const yMean = values.reduce((s, v) => s + v, 0) / n;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - xMean) * (values[i] - yMean);
+    den += (i - xMean) ** 2;
+  }
+  return den === 0 ? 0 : num / den;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scoring sub-functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+function scoreAttendance(history: { week: string; percentage: number }[]) {
+  const vals = history.slice(-4).map(h => h.percentage);
+  if (vals.length === 0) return { points: 0, reason: 'No attendance data.' };
+
+  const latest = vals[vals.length - 1];
+  const earliest = vals[0];
+  const drop = earliest - latest;
+  const attSlope = slope(vals);
+  const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+
+  let pts = 0;
+  if (latest < 60) pts = 30;
+  else if (latest < 75) {
+    pts = 20;
+    if (drop >= 15 || attSlope < -2) pts = Math.min(30, pts + 8);
+  } else if (latest < 85) {
+    pts = 8;
+    if (drop >= 15 || attSlope < -3) pts = Math.min(30, pts + 10);
+  } else {
+    if (drop >= 15 || attSlope < -4) pts = 12;
+    else if (drop >= 8) pts = 5;
+  }
+
+  pts = clamp(pts, 0, 30);
+  const trendLabel = attSlope < -2 ? 'declining trend' : attSlope > 2 ? 'improving trend' : 'stable';
+  let reason = `Latest attendance: ${latest}% (avg ${avg.toFixed(0)}%, ${trendLabel})`;
+  if (drop >= 15) reason += `, dropped ${drop.toFixed(0)}% over recent weeks`;
+  return { points: pts, reason };
+}
+
+function scoreGrades(history: { test: string; score: number }[]) {
+  const vals = history.slice(-4).map(h => h.score);
+  if (vals.length === 0) return { points: 0, reason: 'No grade data.' };
+
+  const latest = vals[vals.length - 1];
+  const gradeSlope = slope(vals);
+  const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+
+  let pts = 0;
+  if (latest < 40) pts = 25;
+  else if (latest < 55) { pts = 18; if (gradeSlope < -2) pts = Math.min(25, pts + 5); }
+  else if (latest < 65) { pts = 12; if (gradeSlope < -2) pts = Math.min(25, pts + 8); }
+  else if (latest < 75) { pts = 5; if (gradeSlope < -3) pts = Math.min(25, pts + 8); }
+  else { if (gradeSlope < -5) pts = 10; else if (gradeSlope < -3) pts = 5; }
+
+  pts = clamp(pts, 0, 25);
+  const trendLabel = gradeSlope < -1.5 ? 'declining' : gradeSlope > 1.5 ? 'improving' : 'stable';
+  return { points: pts, reason: `Latest score: ${latest}/100 (avg ${avg.toFixed(0)}, ${trendLabel} trend)` };
+}
+
+function scoreBacklogs(backlogs: number, subjects: string[]) {
+  let pts = 0;
+  if (backlogs >= 4) pts = 20;
+  else if (backlogs === 3) pts = 17;
+  else if (backlogs === 2) pts = 13;
+  else if (backlogs === 1) pts = 6;
+
+  const subjectList = subjects.length > 0 ? `: ${subjects.join(', ')}` : '';
+  const reason = backlogs === 0 ? 'No active backlogs.' : `${backlogs} active backlog${backlogs > 1 ? 's' : ''}${subjectList}`;
+  return { points: pts, reason };
+}
+
+function scoreFeeOverdue(overdueDays: number) {
+  let pts = 0;
+  if (overdueDays > 30) pts = 15;
+  else if (overdueDays > 10) pts = 12;
+  else if (overdueDays > 0) pts = 6;
+  const reason = overdueDays === 0 ? 'Fee paid — no overdue balance.' : `Fee overdue by ${overdueDays} days`;
+  return { points: pts, reason };
+}
+
+function scoreEngagement(submissionRate: number) {
+  let pts = 0;
+  if (submissionRate < 40) pts = 10;
+  else if (submissionRate < 55) pts = 7;
+  else if (submissionRate < 65) pts = 4;
+  else if (submissionRate < 75) pts = 2;
+  return { points: pts, reason: `Assignment/LMS submission rate: ${submissionRate}%` };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suggested action map (Phase 4 of spec)
+// ─────────────────────────────────────────────────────────────────────────────
+export function getSuggestedAction(dominantFactor: string): string {
+  switch (dominantFactor) {
+    case 'Grade Decline': return 'Extra Class / Tutoring';
+    case 'Attendance Decline': return 'Counseling / Check-in';
+    case 'Fee Overdue': return 'Financial Aid Referral';
+    case 'Backlogs': return 'Academic Support';
+    case 'Low Engagement': return 'Counseling / Check-in';
+    default: return 'Monitor';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main scoring function
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeRiskScore(student: RawStudentData): RiskResult {
+  const attResult = scoreAttendance(student.attendanceHistory);
+  const gradeResult = scoreGrades(student.gradeHistory);
+  const backlogResult = scoreBacklogs(student.backlogs, student.backlogSubjects);
+  const feeResult = scoreFeeOverdue(student.feeOverdueDays);
+  const engResult = scoreEngagement(student.submissionRate);
+
+  const total = clamp(
+    attResult.points + gradeResult.points + backlogResult.points + feeResult.points + engResult.points,
+    0, 100
+  );
+
+  const riskLevel: RiskLevel = total >= 61 ? 'High' : total >= 31 ? 'Medium' : 'Low';
+
+  const factors: ContributingFactor[] = [];
+  if (attResult.points > 0) factors.push({ factor: 'Attendance Decline', points: attResult.points, reason: attResult.reason });
+  if (gradeResult.points > 0) factors.push({ factor: 'Grade Decline', points: gradeResult.points, reason: gradeResult.reason });
+  if (backlogResult.points > 0) factors.push({ factor: 'Backlogs', points: backlogResult.points, reason: backlogResult.reason });
+  if (feeResult.points > 0) factors.push({ factor: 'Fee Overdue', points: feeResult.points, reason: feeResult.reason });
+  if (engResult.points > 0) factors.push({ factor: 'Low Engagement', points: engResult.points, reason: engResult.reason });
+
+  factors.sort((a, b) => b.points - a.points);
+
+  const dominantFactor = factors.length > 0 ? factors[0].factor : 'None';
+  const suggestedAction = getSuggestedAction(dominantFactor);
+
+  return { riskScore: total, riskLevel, contributingFactors: factors, dominantFactor, suggestedAction };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fallback explanation (no Groq — pure structured text)
+// ─────────────────────────────────────────────────────────────────────────────
+export function generateFallbackExplanation(
+  student: { name: string; department: string; year: number },
+  result: RiskResult
+): string {
+  if (result.contributingFactors.length === 0) {
+    return `${student.name} is currently showing no significant risk signals. Continue monitoring their progress as usual.`;
+  }
+  const top = result.contributingFactors[0];
+  const others = result.contributingFactors.slice(1, 3);
+
+  let explanation = `${student.name} (Year ${student.year}, ${student.department}) has a ${result.riskLevel.toLowerCase()} dropout risk score of ${result.riskScore}/100. `;
+  explanation += `The primary concern is ${top.factor.toLowerCase()} — ${top.reason.toLowerCase()}. `;
+
+  if (others.length === 1) {
+    explanation += `This is compounded by ${others[0].factor.toLowerCase()}: ${others[0].reason.toLowerCase()}.`;
+  } else if (others.length >= 2) {
+    explanation += `Additional risk signals include ${others[0].factor.toLowerCase()} (${others[0].reason.toLowerCase()}) and ${others[1].factor.toLowerCase()} (${others[1].reason.toLowerCase()}).`;
+  }
+  return explanation;
+}

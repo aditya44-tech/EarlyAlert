@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import Papa from 'papaparse';
-import { StudentSummary, UploadLog } from '../types';
-import { StudentTableRow } from '../components/StudentTableRow';
-import { StudentCard } from '../components/StudentCard';
+import { StudentSummary, UploadLog } from '@/lib/types';
+import { StudentTableRow } from '@/components/StudentTableRow';
+import { StudentCard } from '@/components/StudentCard';
 import {
   AlertTriangle,
   ArrowDownUp,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActionType, MentorActionPayload } from '../types';
+import { ActionType, MentorActionPayload } from '@/lib/types';
 import {
   ArrowLeft,
   CheckCircle,
@@ -10,12 +10,15 @@ import {
   Calendar,
   BookOpen,
   UserCheck,
+  Zap,
 } from 'lucide-react';
 
 interface MentorActionPanelProps {
   studentId: string;
   studentName: string;
+  riskScore?: number;
   suggestedAction?: string;
+  dominantFactor?: string;
   onBack: () => void;
   onSubmitSuccess: (payload: MentorActionPayload) => void;
   onNavigateToStudentView?: (studentId: string) => void;
@@ -25,7 +28,9 @@ interface MentorActionPanelProps {
 export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   studentId,
   studentName,
+  riskScore = 0,
   suggestedAction = 'Extra Class / Tutoring',
+  dominantFactor = 'Risk Factors',
   onBack,
   onSubmitSuccess,
   onNavigateToStudentView,
@@ -60,8 +65,10 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   const [startDate] = useState('2026-09-16');
 
   const [submittedPayload, setSubmittedPayload] = useState<MentorActionPayload | null>(null);
+  const [groqRationale, setGroqRationale] = useState<string>('');
+  const [rationaleLoading, setRationaleLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Construct the exact object specified by data contract
@@ -84,6 +91,29 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
     console.log('[MentorActionPanel] Created intervention payload:', payload);
     setSubmittedPayload(payload);
     onSubmitSuccess(payload);
+
+    // Fetch Groq rationale async
+    setRationaleLoading(true);
+    try {
+      const res = await fetch('/api/groq/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'rationale',
+          studentName: studentName,
+          riskScore: riskScore,
+          actionType: actionType,
+          dominantFactor: dominantFactor
+        })
+      });
+      if (!res.ok) throw new Error('API Error');
+      const data = await res.json();
+      setGroqRationale(data.text);
+    } catch {
+      setGroqRationale(`"${actionType}" is the recommended intervention based on ${studentName}'s primary risk factor.`);
+    } finally {
+      setRationaleLoading(false);
+    }
   };
 
   return (
@@ -118,6 +148,22 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
                 Payload formatted and recorded for student {studentName} ({studentId}).
               </p>
             </div>
+          </div>
+
+          {/* Groq Rationale */}
+          <div className="bg-white text-[#0D0D0D] p-4 border-2 border-white">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-3.5 h-3.5 text-[#D62828]" />
+              <span className="text-xs font-black uppercase tracking-wider text-neutral-600">AI Rationale (Groq)</span>
+            </div>
+            {rationaleLoading ? (
+              <div className="animate-pulse space-y-1.5">
+                <div className="h-3 bg-neutral-200 w-3/4 rounded"></div>
+                <div className="h-3 bg-neutral-200 w-full rounded"></div>
+              </div>
+            ) : (
+              <p className="text-sm font-medium text-[#0D0D0D] leading-relaxed">{groqRationale}</p>
+            )}
           </div>
 
           <div className="bg-[#0D0D0D] text-green-300 p-4 border-2 border-white font-mono text-xs overflow-x-auto">

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { StudentDetail } from '../types';
-import { RiskBadge } from '../components/RiskBadge';
-import { TrendChart } from '../components/TrendChart';
-import { FactorBreakdownList } from '../components/FactorBreakdownList';
+import React, { useState, useEffect, useRef } from 'react';
+import { StudentDetail } from '@/lib/types';
+import { RiskBadge } from '@/components/RiskBadge';
+import { TrendChart } from '@/components/TrendChart';
+import { FactorBreakdownList } from '@/components/FactorBreakdownList';
+import { computeRiskScore, RawStudentData } from '@/lib/riskEngine';
 import {
   ArrowLeft,
   Sparkles,
@@ -14,6 +15,7 @@ import {
   Clock,
   TrendingDown,
   Layers,
+  Zap,
 } from 'lucide-react';
 
 interface StudentDetailViewProps {
@@ -31,14 +33,84 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   onAssignAction,
   onViewInterventions,
 }) => {
-  // Pattern for Groq API async fetch loading state
+  const [groqExplanation, setGroqExplanation] = useState<string>(student.aiExplanation);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isGroqPowered, setIsGroqPowered] = useState(false);
+  const [groqError, setGroqError] = useState<string | null>(null);
+  const lastFetchedId = useRef<string>('');
 
-  const handleSimulateGroqFetch = () => {
+  // Auto-fetch Groq explanation whenever the student changes
+  useEffect(() => {
+    setGroqExplanation(student.aiExplanation);
+    setIsGroqPowered(false);
+    setGroqError(null);
+
+    // Only fetch if student changed
+    if (lastFetchedId.current === student.studentId) return;
+    lastFetchedId.current = student.studentId;
+
+    const fetchExplanation = async () => {
+      setIsAiLoading(true);
+      try {
+        const res = await fetch('/api/groq/explain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'explain',
+            studentName: student.name,
+            department: student.department,
+            year: student.year,
+            riskScore: student.riskScore,
+            riskLevel: student.riskLevel,
+            contributingFactors: student.contributingFactors
+          })
+        });
+        if (!res.ok) throw new Error('API Error');
+        const data = await res.json();
+        setGroqExplanation(data.text || student.aiExplanation);
+        if (data.powered) {
+          setIsGroqPowered(true);
+        }
+      } catch {
+        setGroqError('Groq API unavailable — showing structured analysis.');
+      } finally {
+        setIsAiLoading(false);
+      }
+    };
+
+    fetchExplanation();
+  }, [student.studentId]);
+
+  const handleRefreshGroq = async () => {
     setIsAiLoading(true);
-    setTimeout(() => {
+    setGroqError(null);
+    lastFetchedId.current = ''; // force re-fetch
+    try {
+      const res = await fetch('/api/groq/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'explain',
+          studentName: student.name,
+          department: student.department,
+          year: student.year,
+          riskScore: student.riskScore,
+          riskLevel: student.riskLevel,
+          contributingFactors: student.contributingFactors
+        })
+      });
+      if (!res.ok) throw new Error('API Error');
+      const data = await res.json();
+      setGroqExplanation(data.text || student.aiExplanation);
+      if (data.powered) {
+        setIsGroqPowered(true);
+      }
+    } catch {
+      setGroqError('Groq API unavailable — showing structured analysis.');
+    } finally {
       setIsAiLoading(false);
-    }, 700);
+      lastFetchedId.current = student.studentId;
+    }
   };
 
   return (
@@ -62,7 +134,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               className="neo-btn px-3.5 py-1.5 bg-[#2563EB] text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
             >
               <Layers className="w-4 h-4" />
-              <span>View Interventions & Outcome</span>
+              <span>View Interventions &amp; Outcome</span>
             </button>
           )}
           <span className="font-mono text-xs font-bold text-neutral-500 bg-white px-2 py-1 border-2 border-[#0D0D0D]">
@@ -134,7 +206,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         </div>
       </div>
 
-      {/* AI Diagnostic Explanation Box (Pre-wired for Groq API async integration) */}
+      {/* Groq AI Diagnostic Explanation Box */}
       <div className="neo-card p-5 bg-white border-[3px] border-[#0D0D0D]">
         <div className="flex items-center justify-between mb-3 border-b-2 border-[#0D0D0D] pb-2">
           <div className="flex items-center gap-2">
@@ -144,15 +216,21 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             <h3 className="font-black text-sm uppercase tracking-wider text-[#0D0D0D]">
               Predictive Risk Narrative &amp; Diagnostic Explanation
             </h3>
+            {isGroqPowered && !isAiLoading && (
+              <span className="flex items-center gap-1 text-[10px] font-black bg-[#0D0D0D] text-[#F4C430] px-1.5 py-0.5 border border-[#0D0D0D]">
+                <Zap className="w-2.5 h-2.5" />
+                GROQ · llama-3.1-8b-instant
+              </span>
+            )}
           </div>
           <button
-            onClick={handleSimulateGroqFetch}
+            onClick={handleRefreshGroq}
             disabled={isAiLoading}
-            title="Simulate Groq API Async Fetch State"
-            className="text-xs font-bold text-neutral-600 hover:text-black flex items-center gap-1 cursor-pointer bg-neutral-100 px-2 py-1 border border-[#0D0D0D]"
+            title="Re-generate explanation via Groq API"
+            className="text-xs font-bold text-neutral-600 hover:text-black flex items-center gap-1 cursor-pointer bg-neutral-100 px-2 py-1 border border-[#0D0D0D] disabled:opacity-50"
           >
             <RefreshCw className={`w-3 h-3 ${isAiLoading ? 'animate-spin' : ''}`} />
-            <span>{isAiLoading ? 'Analyzing...' : 'Async Query Pattern'}</span>
+            <span>{isAiLoading ? 'Generating...' : 'Refresh via Groq'}</span>
           </button>
         </div>
 
@@ -162,15 +240,18 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             <div className="h-4 bg-neutral-300 w-full"></div>
             <div className="h-4 bg-neutral-300 w-2/3"></div>
             <span className="text-[11px] font-mono text-neutral-500 block pt-1">
-              Connecting to model endpoint (Groq API inference stub)...
+              Connecting to Groq API (llama-3.1-8b-instant)...
             </span>
           </div>
         ) : (
           <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] text-sm text-[#0D0D0D] font-medium leading-relaxed">
             <div className="flex items-start gap-2.5">
               <span className="w-3 h-3 bg-[#D62828] shrink-0 mt-1 border border-[#0D0D0D]" />
-              <p>{student.aiExplanation}</p>
+              <p>{groqExplanation}</p>
             </div>
+            {groqError && (
+              <p className="text-[11px] text-neutral-500 mt-2 font-mono">{groqError}</p>
+            )}
           </div>
         )}
       </div>
@@ -201,7 +282,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               </h3>
             </div>
             <span className="text-xs font-mono font-bold px-1.5 py-0.5 bg-red-100 text-[#D62828] border border-[#0D0D0D]">
-              Decline Tracked
+              {student.attendanceHistory.length} Weeks
             </span>
           </div>
           <p className="text-xs text-neutral-600 mb-4 font-medium">
@@ -229,7 +310,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               </h3>
             </div>
             <span className="text-xs font-mono font-bold px-1.5 py-0.5 bg-neutral-100 text-[#0D0D0D] border border-[#0D0D0D]">
-              3 Recent Exams
+              {student.gradeHistory.length} Assessments
             </span>
           </div>
           <p className="text-xs text-neutral-600 mb-4 font-medium">
@@ -243,7 +324,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             lineColor="#0D0D0D"
             targetThreshold={70}
             thresholdLabel="Passing Threshold (70)"
-            yDomain={[40, 100]}
+            yDomain={[30, 100]}
           />
         </div>
       </div>
@@ -253,7 +334,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-neutral-600" />
           <span className="text-xs font-bold text-neutral-700">
-            Last diagnostic refresh: September 15, 2026 • EarlyAlert Inference Engine v1.2
+            Last diagnostic refresh: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} &bull; EarlyAlert Inference Engine v1.0
           </span>
         </div>
         <div className="flex items-center gap-3">

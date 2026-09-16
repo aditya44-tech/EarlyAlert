@@ -1,5 +1,5 @@
 import React from 'react';
-import { StudentSummary } from '../types';
+import { StudentSummary } from '@/lib/types';
 import { RiskBadge } from './RiskBadge';
 import { InterventionStatusBadge } from './InterventionStatusBadge';
 import { ChevronRight } from 'lucide-react';

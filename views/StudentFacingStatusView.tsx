@@ -1,5 +1,5 @@
 import React from 'react';
-import { StudentStatusData } from '../types';
+import { StudentStatusData } from '@/lib/types';
 import {
   Calendar,
   Clock,
