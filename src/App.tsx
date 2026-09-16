@@ -37,7 +37,7 @@ type Role = 'mentor' | 'student';
 export default function App() {
   // Application Data States
   const [students, setStudents] = useState<StudentSummary[]>(initialStudents);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('S001');
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [detailsMap, setDetailsMap] = useState<Record<string, StudentDetail>>(studentDetailsMap);
   const [uploadHistory, setUploadHistory] = useState<UploadLog[]>([]);
   const [studentStatusData, setStudentStatusData] = useState<Record<string, StudentStatusData>>(
@@ -52,14 +52,14 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState<ScreenKey>('dashboard');
 
   // Active selected student detail
-  const currentDetail: StudentDetail =
-    detailsMap[selectedStudentId] || detailsMap['S001'];
+  const currentDetail: StudentDetail | null =
+    detailsMap[selectedStudentId] || null;
 
   // Active student status view data
   const currentStudentStatus: StudentStatusData =
     studentStatusData[selectedStudentId] || {
       studentId: selectedStudentId,
-      name: currentDetail.name,
+      name: currentDetail?.name ?? '',
       activeIntervention: null,
     };
 
@@ -67,14 +67,14 @@ export default function App() {
   const currentOutcome: OutcomeComparisonData =
     outcomeDataMap[selectedStudentId] || {
       studentId: selectedStudentId,
-      name: currentDetail.name,
+      name: currentDetail?.name ?? '',
       intervention: {
-        type: currentDetail.suggestedAction.split('/')[0].trim(),
+        type: currentDetail?.suggestedAction?.split('/')[0]?.trim() ?? 'Monitor',
         details: { subject: 'Academic Support Session', schedule: 'Weekly 4pm' },
         startDate: '2026-09-01',
       },
-      baselineScore: currentDetail.riskScore,
-      currentScore: Math.max(10, currentDetail.riskScore - 20),
+      baselineScore: currentDetail?.riskScore ?? 0,
+      currentScore: Math.max(10, (currentDetail?.riskScore ?? 0) - 20),
       scoreDelta: -20,
       outcome: 'Improving',
       checkpointDate: '2026-09-15',
@@ -89,8 +89,42 @@ export default function App() {
     
     parsedData.forEach(row => {
       const sid = row.studentId?.trim();
-      if (!sid || !newDetails[sid]) return;
-      
+      if (!sid) return;
+
+      // Create a new student entry if they don't exist yet
+      if (!newDetails[sid]) {
+        const name = row.name?.trim() || sid;
+        const department = row.department?.trim() || 'Unknown';
+        const year = parseInt(row.year, 10) || 1;
+
+        newDetails[sid] = {
+          studentId: sid,
+          name,
+          department,
+          year,
+          riskScore: 0,
+          riskLevel: 'Low',
+          contributingFactors: [],
+          attendanceHistory: [],
+          gradeHistory: [],
+          aiExplanation: '',
+          suggestedAction: 'Monitor',
+        };
+
+        // Also add to the summary list if not there
+        if (!newStudents.find(s => s.studentId === sid)) {
+          newStudents.push({
+            studentId: sid,
+            name,
+            department,
+            year,
+            riskScore: 0,
+            riskLevel: 'Low',
+            interventionStatus: 'None',
+          });
+        }
+      }
+
       const student = { ...newDetails[sid] };
       let newRisk = student.riskScore;
 
@@ -111,14 +145,12 @@ export default function App() {
         const overdue = parseInt(row.overdueDays || '0', 10);
         if (isNaN(overdue)) return;
         
-        // Remove old fee factor, add new one if overdue
         student.contributingFactors = student.contributingFactors.filter(f => f.factor !== 'Fee Overdue');
         if (overdue > 0) {
           student.contributingFactors.push({ factor: 'Fee Overdue', points: 15, reason: `Fee overdue by ${overdue} days` });
           newRisk += 15;
         } else {
-          // If they paid, lower risk slightly if they previously had fee overdue
-          newRisk -= 10; 
+          newRisk = Math.max(0, newRisk - 10);
         }
       } else if (uploadType === 'backlog') {
         const backlogs = parseInt(row.backlogCount || '0', 10);
@@ -130,9 +162,7 @@ export default function App() {
           newRisk += 20;
         }
       } else if (uploadType === 'subject_wise') {
-        // Just record generic engagement for now
         student.gradeHistory = [...student.gradeHistory, { test: `${weekLabel} (Subject Update)`, score: 75 }];
-        // Assume processing was valid
       }
       
       newRisk = Math.max(0, Math.min(100, newRisk));
@@ -172,6 +202,7 @@ export default function App() {
 
     return { success: true, updatedCount, skippedCount: parsedData.length - updatedCount };
   };
+
 
   // Navigation handlers
   const handleSelectStudent = (studentId: string) => {
