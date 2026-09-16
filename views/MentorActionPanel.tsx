@@ -20,7 +20,6 @@ interface MentorActionPanelProps {
   dominantFactor?: string;
   onBack: () => void;
   onSubmitSuccess: (payload: MentorActionPayload) => void;
-  onNavigateToStudentView?: (studentId: string) => void;
   onNavigateToOutcomeView?: (studentId: string) => void;
 }
 
@@ -32,7 +31,6 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   dominantFactor = 'Risk Factors',
   onBack,
   onSubmitSuccess,
-  onNavigateToStudentView,
   onNavigateToOutcomeView,
 }) => {
   // Determine initial action type from suggestedAction
@@ -166,15 +164,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
 
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            {onNavigateToStudentView && (
-              <button
-                id="view-as-student-btn"
-                onClick={() => onNavigateToStudentView(studentId)}
-                className="neo-btn px-4 py-2 bg-white text-[#0D0D0D] text-xs font-black uppercase tracking-wider"
-              >
-                Inspect Student's View
-              </button>
-            )}
+
             {onNavigateToOutcomeView && (
               <button
                 id="view-outcome-btn"

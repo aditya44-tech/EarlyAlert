@@ -160,15 +160,15 @@ export default function App() {
       studentId: selectedStudentId,
       name: currentDetail?.name ?? '',
       intervention: {
-        type: currentDetail?.suggestedAction?.split('/')[0]?.trim() ?? 'Monitor',
-        details: { subject: 'Academic Support Session', schedule: 'Weekly 4pm' },
-        startDate: '2026-09-01',
+        type: currentDetail?.activeIntervention?.type ?? currentDetail?.suggestedAction?.split('/')[0]?.trim() ?? 'Monitor',
+        details: currentDetail?.activeIntervention?.details ?? { subject: 'Pending Configuration', schedule: 'TBD' },
+        startDate: currentDetail?.activeIntervention?.assignedDate ?? new Date().toISOString().split('T')[0],
       },
       baselineScore: currentDetail?.riskScore ?? 0,
-      currentScore: Math.max(10, (currentDetail?.riskScore ?? 0) - 20),
-      scoreDelta: -20,
-      outcome: 'Improving',
-      checkpointDate: '2026-09-15',
+      currentScore: currentDetail?.riskScore ?? 0,
+      scoreDelta: 0,
+      outcome: 'No Change',
+      checkpointDate: new Date().toISOString().split('T')[0],
     };
 
   // CSV Upload Handler — uses the deterministic risk engine for consistent scoring
@@ -539,6 +539,7 @@ export default function App() {
           <StudentFacingStatusView
             statusData={currentStudentStatus}
             allStudents={authUser?.role === 'mentor' ? students.map((s) => ({ studentId: s.studentId, name: s.name })) : []}
+            studentDetail={currentDetail || undefined}
             onSelectDifferentStudent={authUser?.role === 'mentor' ? (id) => setSelectedStudentId(id) : undefined}
             onSwitchToMentor={authUser?.role === 'mentor' ? () => {
               setRole('mentor');
@@ -571,11 +572,6 @@ export default function App() {
             dominantFactor={currentDetail.contributingFactors[0]?.factor ?? 'Risk Factors'}
             onBack={() => setCurrentScreen('detail')}
             onSubmitSuccess={handleInterventionAssigned}
-            onNavigateToStudentView={(id) => {
-              setSelectedStudentId(id);
-              setRole('student');
-              setCurrentScreen('student-view');
-            }}
             onNavigateToOutcomeView={(id) => {
               setSelectedStudentId(id);
               setCurrentScreen('outcome');

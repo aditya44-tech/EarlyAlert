@@ -14,6 +14,7 @@ import {
 interface StudentFacingStatusViewProps {
   statusData: StudentStatusData;
   allStudents?: { studentId: string; name: string }[];
+  studentDetail?: import('@/lib/types').StudentDetail;
   onSelectDifferentStudent?: (studentId: string) => void;
   onSwitchToMentor?: () => void;
 }
@@ -21,6 +22,7 @@ interface StudentFacingStatusViewProps {
 export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = ({
   statusData,
   allStudents = [],
+  studentDetail,
   onSelectDifferentStudent,
   onSwitchToMentor,
 }) => {
@@ -127,16 +129,43 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
             </div>
           </div>
 
+          {/* Student Academic Standing Summary (if available) */}
+          {studentDetail && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              <div className="p-4 bg-[#0D0D0D] text-white border-[3px] border-[#0D0D0D]">
+                <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Current Academic Standing</span>
+                <div className="text-3xl font-black font-mono mt-1 text-[#F4C430]">{100 - studentDetail.riskScore}<span className="text-sm">/100</span></div>
+                <div className="text-xs font-bold mt-1 text-neutral-300">Overall Health Score</div>
+              </div>
+              <div className="p-4 bg-white border-[3px] border-[#0D0D0D]">
+                 <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500">Key Areas for Improvement</span>
+                 <ul className="mt-2 text-xs font-bold text-[#0D0D0D] space-y-1 list-disc list-inside">
+                   {studentDetail.contributingFactors.slice(0,2).map(f => (
+                     <li key={f.factor}>{f.factor}</li>
+                   ))}
+                   {studentDetail.contributingFactors.length === 0 && (
+                     <li>Keep up the good work!</li>
+                   )}
+                 </ul>
+              </div>
+            </div>
+          )}
+
           {/* Reassuring Guidance & Next Steps */}
-          <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] text-xs space-y-2">
+          <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] text-xs space-y-2 mt-4">
             <div className="flex items-center gap-1.5 font-black uppercase tracking-wider text-[#0D0D0D]">
               <ShieldCheck className="w-4 h-4 text-[#2D9D5F]" />
               <span>What to bring &amp; expectations</span>
             </div>
-            <p className="text-neutral-700 font-medium">
-              Please attend with your course syllabus and recent homework questions. Mentors are
-              here to reinforce fundamentals and ensure you stay on pace for the upcoming term.
-            </p>
+            <div className="text-neutral-700 font-medium space-y-1">
+              {intervention.type.toLowerCase().includes('counseling') ? (
+                <p>This is a safe, confidential space. Please come prepared to discuss how you're balancing your workload, any personal or academic challenges you're facing, and how we can best support your well-being.</p>
+              ) : intervention.type.toLowerCase().includes('financial') ? (
+                <p>Please bring any recent correspondence from the financial aid office, your student ID, and an outline of your current financial concerns so we can explore scholarships or payment plans.</p>
+              ) : (
+                <p>Please attend with your course syllabus, recent graded assignments, and any specific homework questions. Mentors are here to reinforce fundamentals and ensure you stay on pace for the upcoming term.</p>
+              )}
+            </div>
           </div>
         </div>
       ) : (
