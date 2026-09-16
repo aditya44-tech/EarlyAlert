@@ -58,7 +58,7 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
         Authorization: `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'qwen/qwen3.8-27b',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: mode === 'rationale' ? 80 : 200,
         temperature: 0.4,
@@ -74,7 +74,7 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
     const data = await groqResponse.json();
     const text: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
 
-    return NextResponse.json({ text, model: 'llama-3.1-8b-instant', powered: true });
+    return NextResponse.json({ text, model: 'qwen/qwen3.8-27b', powered: true });
 
   } catch (error) {
     console.error('[API /groq/explain]', error);
