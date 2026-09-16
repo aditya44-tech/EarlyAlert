@@ -17,6 +17,7 @@ import { StudentDetailView } from '@/views/StudentDetailView';
 import { MentorActionPanel } from '@/views/MentorActionPanel';
 import { StudentFacingStatusView } from '@/views/StudentFacingStatusView';
 import { OutcomeComparisonView } from '@/views/OutcomeComparisonView';
+import { LoginView, AuthUser } from '@/views/LoginView';
 import {
   ShieldAlert,
   GraduationCap,
@@ -28,6 +29,7 @@ import {
   AlertCircle,
   Clock,
   Layers,
+  LogOut,
 } from 'lucide-react';
 
 type ScreenKey = 'dashboard' | 'detail' | 'action' | 'student-view' | 'outcome';
@@ -70,9 +72,31 @@ export default function App() {
     }
   }, [uploadHistory, students, detailsMap, isClient]);
 
+  // Auth State
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+
   // Active Role and Navigation Screen
   const [role, setRole] = useState<Role>('mentor');
   const [currentScreen, setCurrentScreen] = useState<ScreenKey>('dashboard');
+
+  const handleLogin = (user: AuthUser) => {
+    setAuthUser(user);
+    if (user.role === 'student') {
+      setRole('student');
+      setSelectedStudentId(user.studentId);
+      setCurrentScreen('student-view');
+    } else {
+      setRole('mentor');
+      setCurrentScreen('dashboard');
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthUser(null);
+    setRole('mentor');
+    setCurrentScreen('dashboard');
+    setSelectedStudentId('');
+  };
 
   // Active selected student detail
   const currentDetail: StudentDetail | null =
@@ -387,6 +411,10 @@ export default function App() {
 
   if (!isClient) return null; // Avoid hydration mismatch
 
+  if (!authUser) {
+    return <LoginView students={students.map(s => ({ studentId: s.studentId, name: s.name }))} onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F1E8] text-[#0D0D0D] flex flex-col font-sans">
       {/* Top System Header */}
@@ -413,42 +441,56 @@ export default function App() {
               </div>
             </div>
 
-            {/* Role Switcher & Controls */}
+            {/* Auth Info & Controls */}
             <div className="flex items-center gap-2 sm:gap-4 self-end sm:self-auto">
-              <div className="flex items-center border-2 border-white bg-neutral-900 p-1">
-                <button
-                  id="mentor-role-toggle-btn"
-                  onClick={() => {
-                    setRole('mentor');
-                    if (currentScreen === 'student-view') {
-                      setCurrentScreen('dashboard');
-                    }
-                  }}
-                  className={`px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
-                    role === 'mentor'
-                      ? 'bg-[#D62828] text-white'
-                      : 'text-neutral-300 hover:text-white'
-                  }`}
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span>Mentor View</span>
-                </button>
-                <button
-                  id="student-role-toggle-btn"
-                  onClick={() => {
-                    setRole('student');
-                    setCurrentScreen('student-view');
-                  }}
-                  className={`px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
-                    role === 'student'
-                      ? 'bg-[#2563EB] text-white'
-                      : 'text-neutral-300 hover:text-white'
-                  }`}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Student View</span>
-                </button>
+              {/* Logged-in user badge */}
+              <div className="flex items-center gap-2 bg-neutral-800 border border-neutral-600 px-3 py-1.5">
+                {authUser.role === 'mentor' ? (
+                  <UserCheck className="w-4 h-4 text-[#D62828]" />
+                ) : (
+                  <GraduationCap className="w-4 h-4 text-[#2563EB]" />
+                )}
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  {authUser.role === 'student' ? `${authUser.name} (${authUser.studentId})` : authUser.name}
+                </span>
               </div>
+              {/* Role Switcher — only visible for mentors */}
+              {authUser.role === 'mentor' && (
+                <div className="flex items-center border-2 border-white bg-neutral-900 p-1">
+                  <button
+                    id="mentor-role-toggle-btn"
+                    onClick={() => {
+                      setRole('mentor');
+                      if (currentScreen === 'student-view') setCurrentScreen('dashboard');
+                    }}
+                    className={`px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
+                      role === 'mentor' ? 'bg-[#D62828] text-white' : 'text-neutral-300 hover:text-white'
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Mentor</span>
+                  </button>
+                  <button
+                    id="student-role-toggle-btn"
+                    onClick={() => { setRole('student'); setCurrentScreen('student-view'); }}
+                    className={`px-3 py-1 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
+                      role === 'student' ? 'bg-[#2563EB] text-white' : 'text-neutral-300 hover:text-white'
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    <span>Student</span>
+                  </button>
+                </div>
+              )}
+              {/* Logout button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 border border-neutral-600 text-neutral-300 hover:text-white text-xs font-black uppercase tracking-wider transition-colors"
+                title="Logout"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </div>
         </div>
