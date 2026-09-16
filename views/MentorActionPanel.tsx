@@ -3,7 +3,6 @@ import { ActionType, MentorActionPayload } from '@/lib/types';
 import {
   ArrowLeft,
   CheckCircle,
-  FileCode,
   Send,
   Sparkles,
   Info,
@@ -61,8 +60,8 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   const [schedule, setSchedule] = useState('Tue/Thu 4pm');
   const [instructor, setInstructor] = useState('');
   const [notes, setNotes] = useState('');
-  const [assignedBy] = useState('mentor-mock-id');
-  const [startDate] = useState('2026-09-16');
+  const [assignedBy] = useState('Mentor');
+  const [startDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [submittedPayload, setSubmittedPayload] = useState<MentorActionPayload | null>(null);
   const [groqRationale, setGroqRationale] = useState<string>('');
@@ -128,9 +127,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Student Profile</span>
         </button>
-        <span className="font-mono text-xs font-black uppercase tracking-wider bg-[#0D0D0D] text-white px-2 py-1">
-          Screen 3: Mentor Action Panel
-        </span>
+
       </div>
 
       {/* Success Confirmation Modal / Card if submitted */}
@@ -166,13 +163,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
             )}
           </div>
 
-          <div className="bg-[#0D0D0D] text-green-300 p-4 border-2 border-white font-mono text-xs overflow-x-auto">
-            <div className="flex items-center justify-between text-neutral-400 pb-2 mb-2 border-b border-neutral-800 text-[11px] font-sans font-bold uppercase">
-              <span>Ready for Backend API Route (/api/interventions)</span>
-              <FileCode className="w-3.5 h-3.5" />
-            </div>
-            <pre>{JSON.stringify(submittedPayload, null, 2)}</pre>
-          </div>
+
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
             {onNavigateToStudentView && (
@@ -181,7 +172,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
                 onClick={() => onNavigateToStudentView(studentId)}
                 className="neo-btn px-4 py-2 bg-white text-[#0D0D0D] text-xs font-black uppercase tracking-wider"
               >
-                Inspect Student's View (Screen 4)
+                Inspect Student's View
               </button>
             )}
             {onNavigateToOutcomeView && (
@@ -190,7 +181,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
                 onClick={() => onNavigateToOutcomeView(studentId)}
                 className="neo-btn px-4 py-2 bg-[#F4C430] text-[#0D0D0D] text-xs font-black uppercase tracking-wider"
               >
-                View Outcome Comparison (Screen 5)
+                View Outcome Comparison
               </button>
             )}
             <button
