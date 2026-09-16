@@ -39,47 +39,12 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const [groqError, setGroqError] = useState<string | null>(null);
   const lastFetchedId = useRef<string>('');
 
-  // Auto-fetch Groq explanation whenever the student changes
+  // Synchronize local state when a new student is loaded
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
     setIsGroqPowered(false);
     setGroqError(null);
-
-    // Only fetch if student changed
-    if (lastFetchedId.current === student.studentId) return;
-    lastFetchedId.current = student.studentId;
-
-    const fetchExplanation = async () => {
-      setIsAiLoading(true);
-      try {
-        const res = await fetch('/api/groq/explain', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'explain',
-            studentName: student.name,
-            department: student.department,
-            year: student.year,
-            riskScore: student.riskScore,
-            riskLevel: student.riskLevel,
-            contributingFactors: student.contributingFactors
-          })
-        });
-        if (!res.ok) throw new Error('API Error');
-        const data = await res.json();
-        setGroqExplanation(data.text || student.aiExplanation);
-        if (data.powered) {
-          setIsGroqPowered(true);
-        }
-      } catch {
-        setGroqError('Groq API unavailable — showing structured analysis.');
-      } finally {
-        setIsAiLoading(false);
-      }
-    };
-
-    fetchExplanation();
-  }, [student.studentId]);
+  }, [student.studentId, student.aiExplanation]);
 
   const handleRefreshGroq = async () => {
     setIsAiLoading(true);

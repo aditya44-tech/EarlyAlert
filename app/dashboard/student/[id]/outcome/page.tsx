@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { useEarlyAlert } from '@/app/providers';
 import { OutcomeComparisonView } from '@/views/OutcomeComparisonView';
 import { StudentDetail, OutcomeComparisonData } from '@/lib/types';
 
-export default function MentorOutcomePage({ params }: { params: { id: string } }) {
+export default function MentorOutcomePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { authUser, fetchStudentDetail, handleResolveIntervention } = useEarlyAlert();
   const router = useRouter();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
@@ -20,16 +22,15 @@ export default function MentorOutcomePage({ params }: { params: { id: string } }
   }, [authUser, router]);
 
   useEffect(() => {
-    if (params.id) {
-      fetchStudentDetail(params.id).then(d => {
+    if (id) {
+      fetchStudentDetail(id).then(d => {
         if (d) setDetail(d);
       });
     }
-  }, [params.id, fetchStudentDetail]);
+  }, [id, fetchStudentDetail]);
 
   if (!authUser || authUser.role !== 'mentor' || !detail) return null;
 
-  // Compute Outcome data dynamically
   const outcomeData: OutcomeComparisonData = {
     studentId: detail.studentId,
     name: detail.name,
@@ -49,7 +50,7 @@ export default function MentorOutcomePage({ params }: { params: { id: string } }
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
       <OutcomeComparisonView
         data={outcomeData}
-        onBack={() => router.push(`/dashboard/student/${params.id}`)}
+        onBack={() => router.push(`/dashboard/student/${id}`)}
         onResolveIntervention={handleResolveIntervention}
       />
     </div>

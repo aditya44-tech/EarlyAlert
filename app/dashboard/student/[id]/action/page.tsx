@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { use } from 'react';
 import { useEarlyAlert } from '@/app/providers';
 import { MentorActionPanel } from '@/views/MentorActionPanel';
 import { StudentDetail } from '@/lib/types';
 
-export default function MentorActionPage({ params }: { params: { id: string } }) {
+export default function MentorActionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const { authUser, fetchStudentDetail, handleInterventionAssigned } = useEarlyAlert();
   const router = useRouter();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
@@ -20,12 +22,12 @@ export default function MentorActionPage({ params }: { params: { id: string } })
   }, [authUser, router]);
 
   useEffect(() => {
-    if (params.id) {
-      fetchStudentDetail(params.id).then(d => {
+    if (id) {
+      fetchStudentDetail(id).then(d => {
         if (d) setDetail(d);
       });
     }
-  }, [params.id, fetchStudentDetail]);
+  }, [id, fetchStudentDetail]);
 
   if (!authUser || authUser.role !== 'mentor' || !detail) return null;
 
@@ -37,9 +39,9 @@ export default function MentorActionPage({ params }: { params: { id: string } })
         riskScore={detail.riskScore}
         suggestedAction={detail.suggestedAction}
         dominantFactor={detail.contributingFactors[0]?.factor ?? 'Risk Factors'}
-        onBack={() => router.push(`/dashboard/student/${params.id}`)}
+        onBack={() => router.push(`/dashboard/student/${id}`)}
         onSubmitSuccess={handleInterventionAssigned}
-        onNavigateToOutcomeView={(id) => router.push(`/dashboard/student/${id}/outcome`)}
+        onNavigateToOutcomeView={(sid) => router.push(`/dashboard/student/${sid}/outcome`)}
       />
     </div>
   );
