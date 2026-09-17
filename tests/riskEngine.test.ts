@@ -310,7 +310,8 @@ test('fallback explanation: single factor mentions score, factor and reason', ()
   assert.match(text, /Ravi/);
   assert.match(text, /Year 2/);
   assert.match(text, new RegExp(`${result.riskScore}/100`));
-  assert.match(text, /fee overdue/i);
+  assert.match(text, /overdue/i);
+  assert.match(text, /45 days/i);
 });
 
 test('fallback explanation: multiple factors lists secondary signals', () => {
@@ -321,9 +322,10 @@ test('fallback explanation: multiple factors lists secondary signals', () => {
     backlogSubjects: ['DBMS', 'OS'],
   }));
   const text = generateFallbackExplanation({ name: 'Meena', department: 'IT', year: 4 }, result);
-  assert.match(text, /attendance decline/i);
-  assert.match(text, /grade decline/i);
-  assert.match(text, /backlogs/i);
+  // New format: human-readable sentences, no raw factor names
+  assert.match(text, /attendance/i);
+  assert.match(text, /grade|unit test/i);
+  assert.match(text, /backlog/i);
   assert.equal(result.riskLevel, 'High');
 });
 

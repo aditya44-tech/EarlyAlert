@@ -267,23 +267,72 @@ export function computeRiskScore(student: RawStudentData): RiskResult {
 // ─────────────────────────────────────────────────────────────────────────────
 // Fallback explanation (no Groq: pure structured text)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Convert a raw internal reason string into a clean human-readable phrase. */
+function humanizeReason(factor: string, reason: string): string {
+  const r = reason.toLowerCase();
+
+  if (factor === 'Attendance Decline') {
+    const pct = reason.match(/latest attendance:\s*(\d+)%/i)?.[1];
+    const dropped = reason.match(/dropped\s*(\d+)%/i)?.[1];
+    const trend = r.includes('declining') ? 'and is on a declining trend' : '';
+    if (pct && dropped) return `attendance has dropped to ${pct}% (a fall of ${dropped}% in recent weeks) ${trend}`.trim();
+    if (pct) return `current attendance is ${pct}%${r.includes('declining') ? ', showing a declining trend' : ''}`;
+    return 'attendance has dropped significantly in recent weeks';
+  }
+
+  if (factor === 'Grade Decline') {
+    const scoreMatch = reason.match(/unit test \d+ score:\s*(\d+)%/i);
+    const score = scoreMatch?.[1];
+    if (r.includes('significant improvement')) return `grade performance improved significantly in Unit Test 2 (${score}%)`;
+    if (r.includes('improvement')) return `grade performance improved to ${score}% in Unit Test 2`;
+    if (r.includes('significant decline')) return `grades dropped sharply in Unit Test 2 (${score}%)`;
+    if (r.includes('decline')) return `grades have declined in Unit Test 2 (${score}%)`;
+    if (score) return `scored ${score}% on their most recent unit test`;
+    return 'test scores are below the expected threshold';
+  }
+
+  if (factor === 'Backlogs') {
+    const count = reason.match(/^(\d+) active backlog/i)?.[1];
+    const subjects = reason.match(/:\s*(.+)$/)?.[1];
+    if (count && subjects) return `has ${count} active backlog${parseInt(count) > 1 ? 's' : ''} in ${subjects}`;
+    if (count) return `has ${count} active backlog${parseInt(count) > 1 ? 's' : ''}`;
+    return 'has uncleared backlogs from previous semesters';
+  }
+
+  if (factor === 'Fee Overdue') {
+    const days = reason.match(/(\d+) days/)?.[1];
+    return days ? `fee payment is overdue by ${days} days` : 'fee payment is overdue';
+  }
+
+  if (factor === 'Low Engagement') {
+    const rate = reason.match(/(\d+)%/)?.[1];
+    return rate ? `LMS submission rate is low at ${rate}%` : 'assignment submission rate is critically low';
+  }
+
+  return reason;
+}
+
 export function generateFallbackExplanation(
   student: { name: string; department: string; year: number },
   result: RiskResult
 ): string {
   if (result.contributingFactors.length === 0) {
-    return `${student.name} is currently showing no significant risk signals. Continue monitoring their progress as usual.`;
+    return `${student.name} is currently showing no significant risk signals. Attendance, grades, and engagement are all within acceptable ranges. Continue monitoring their progress as usual.`;
   }
+
   const top = result.contributingFactors[0];
   const others = result.contributingFactors.slice(1, 3);
+  const riskWord = result.riskLevel === 'High' ? 'high' : result.riskLevel === 'Medium' ? 'moderate' : 'low';
 
-  let explanation = `${student.name} (Year ${student.year}, ${student.department}) has a ${result.riskLevel.toLowerCase()} dropout risk score of ${result.riskScore}/100. `;
-  explanation += `The primary concern is ${top.factor.toLowerCase()}: ${top.reason.toLowerCase()}. `;
+  let explanation = `${student.name} (Year ${student.year}, ${student.department}) is at ${riskWord} dropout risk with a score of ${result.riskScore}/100. `;
+  explanation += `The primary concern is that ${humanizeReason(top.factor, top.reason)}. `;
 
   if (others.length === 1) {
-    explanation += `This is compounded by ${others[0].factor.toLowerCase()}: ${others[0].reason.toLowerCase()}.`;
+    explanation += `This is compounded by the fact that the student ${humanizeReason(others[0].factor, others[0].reason)}.`;
   } else if (others.length >= 2) {
-    explanation += `Additional risk signals include ${others[0].factor.toLowerCase()} (${others[0].reason.toLowerCase()}) and ${others[1].factor.toLowerCase()} (${others[1].reason.toLowerCase()}).`;
+    explanation += `Additional risk signals include: ${humanizeReason(others[0].factor, others[0].reason)}, and ${humanizeReason(others[1].factor, others[1].reason)}.`;
   }
+
   return explanation;
 }
