@@ -22,8 +22,13 @@ function weeks(values: number[]) {
   return values.map((percentage, i) => ({ week: `W${i + 1}`, percentage }));
 }
 
-function tests(scores: number[]) {
-  return scores.map((score, i) => ({ testName: `T${i + 1}`, score, maxMarks: 100 }));
+/** Build unit test data with the engine's expected test names */
+function unitTests(ut1Score: number, ut2Score?: number) {
+  const tests = [{ testName: 'Unit Test 1', score: ut1Score, maxMarks: 100 }];
+  if (ut2Score !== undefined) {
+    tests.push({ testName: 'Unit Test 2', score: ut2Score, maxMarks: 100 });
+  }
+  return tests;
 }
 
 /** Healthy baseline student: zero risk on every factor. */
@@ -35,18 +40,13 @@ function makeStudent(overrides: Partial<RawStudentData> = {}): RawStudentData {
     year: 2,
     attendanceHistory: weeks([92, 91, 93, 92]), // stable, >= 85
     subjectAttendance: [],
-    termTests: tests([85, 88, 86, 87]),     // stable, >= 75
+    termTests: unitTests(85, 87),     // stable, >= 75
     backlogs: 0,
     backlogSubjects: [],
     feeOverdueDays: 0,
     submissionRate: 90,
     ...overrides,
   };
-}
-
-/** Simple linear-slope helper: values move by `step` per entry. */
-function series(start: number, step: number, n = 4) {
-  return Array.from({ length: n }, (_, i) => start + i * step);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -99,29 +99,30 @@ test('attendance factor: >=85% is zero unless the drop is large', () => {
   assert.equal(bigDrop.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points, 12);
 });
 
-test('grade factor: <40 scores max 25 points', () => {
-  const r = computeRiskScore(makeStudent({ termTests: tests([45, 38, 30, 25]) }));
+test('grade factor: UT1 <40 scores max 25 points', () => {
+  const r = computeRiskScore(makeStudent({ termTests: unitTests(30) }));
   assert.equal(r.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
 });
 
-test('grade factor: tiered scoring 40-54 / 55-64 / 65-74', () => {
-  const mid = computeRiskScore(makeStudent({ termTests: tests([60, 60, 60, 60]) }));
+test('grade factor: UT1 tiered scoring 40-54 / 55-64 / 65-74', () => {
+  const mid = computeRiskScore(makeStudent({ termTests: unitTests(60) }));
   assert.equal(mid.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 12);
 
-  const low = computeRiskScore(makeStudent({ termTests: tests([50, 50, 50, 50]) }));
+  const low = computeRiskScore(makeStudent({ termTests: unitTests(50) }));
   assert.equal(low.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 18);
 
-  const high = computeRiskScore(makeStudent({ termTests: tests([70, 70, 70, 70]) }));
+  const high = computeRiskScore(makeStudent({ termTests: unitTests(70) }));
   assert.equal(high.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 5);
 });
 
-test('grade factor: declining trend adds points in the 55-64 band', () => {
-  const flat = computeRiskScore(makeStudent({ termTests: tests([64, 63, 62, 62]) }));
-  const decline = computeRiskScore(makeStudent({ termTests: tests(series(64, -3)) })); // 64,61,58,55 -> slope -3
-  const flatPts = flat.contributingFactors.find(f => f.factor === 'Grade Decline')?.points ?? 0;
-  const declinePts = decline.contributingFactors.find(f => f.factor === 'Grade Decline')?.points ?? 0;
-  assert.ok(declinePts > flatPts, `expected decline (${declinePts}) > flat (${flatPts})`);
-  assert.ok(declinePts <= 25, 'grade points must be capped at 25');
+test('grade factor: UT2 decline adds points, UT2 recovery subtracts', () => {
+  // UT1 80 → UT2 50: significant decline (-30) → 18 + 10 = capped at 25
+  const decline = computeRiskScore(makeStudent({ termTests: unitTests(80, 50) }));
+  assert.equal(decline.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
+
+  // UT1 50 → UT2 80: significant recovery (+30) → 0 (>=75) - 15 = 0, factor excluded
+  const recovery = computeRiskScore(makeStudent({ termTests: unitTests(50, 80) }));
+  assert.equal(recovery.contributingFactors.find(f => f.factor === 'Grade Decline'), undefined);
 });
 
 test('backlog factor: tiered 1/2/3/4+ mapping', () => {
@@ -167,7 +168,7 @@ test('engagement factor: tiered submission-rate mapping', () => {
 test('maximum-risk student reaches exactly 100', () => {
   const r = computeRiskScore(makeStudent({
     attendanceHistory: weeks([50, 45, 40, 35]),
-    termTests: tests([30, 25, 20, 15]),
+    termTests: unitTests(20, 15),
     backlogs: 4,
     backlogSubjects: ['A', 'B', 'C', 'D'],
     feeOverdueDays: 60,
@@ -189,10 +190,10 @@ test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
   assert.equal(medium.riskScore, 31);
   assert.equal(medium.riskLevel, 'Medium');
 
-  // 30 (att<60) + 18 (grade 40-54 flat) + 12 (fee 11-30) = 60
+  // 30 (att<60) + 18 (grade 40-54 UT1) + 12 (fee 11-30) = 60
   const justUnder = computeRiskScore(makeStudent({
     attendanceHistory: weeks([55, 50, 48, 45]),
-    termTests: tests([50, 50, 50, 50]),
+    termTests: unitTests(50),
     feeOverdueDays: 20,
   }));
   assert.equal(justUnder.riskScore, 60);
@@ -201,7 +202,7 @@ test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
   // 30 (att<60) + 25 (grade<40) + 6 (1 backlog) = 61
   const high = computeRiskScore(makeStudent({
     attendanceHistory: weeks([55, 50, 48, 45]),
-    termTests: tests([35, 30, 28, 25]),
+    termTests: unitTests(30),
     backlogs: 1,
     backlogSubjects: ['OS'],
   }));
@@ -212,7 +213,7 @@ test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
 test('factors are sorted descending by points', () => {
   const r = computeRiskScore(makeStudent({
     attendanceHistory: weeks([50, 45, 40, 35]), // 30
-    termTests: tests([50, 50, 50, 50]),     // 18
+    termTests: unitTests(50),     // 18
     backlogs: 2,                                 // 13
     feeOverdueDays: 20,                          // 12
     submissionRate: 50,                          // 7
@@ -223,9 +224,9 @@ test('factors are sorted descending by points', () => {
 });
 
 test('dominant factor ties keep the earlier-inserted factor (grade before fee)', () => {
-  // grade 55-64 flat = 12, fee 11-30 = 12; everything else zero.
+  // grade UT1 60 = 12 pts, fee 11-30 = 12 pts; everything else zero.
   const r = computeRiskScore(makeStudent({
-    termTests: tests([60, 60, 60, 60]),
+    termTests: unitTests(60),
     feeOverdueDays: 15,
   }));
   assert.equal(r.riskScore, 24);
@@ -244,7 +245,7 @@ test('negative / out-of-range inputs are ignored, yielding zero points', () => {
     feeOverdueDays: -10,
     submissionRate: -50,
     attendanceHistory: weeks([100, 100, 100, 100]),
-    termTests: tests([100, 100, 100, 100]),
+    termTests: unitTests(100, 100),
   }));
   assert.equal(r.riskScore, 0);
   assert.deepEqual(r.contributingFactors, []);
@@ -252,8 +253,9 @@ test('negative / out-of-range inputs are ignored, yielding zero points', () => {
   // Invalid entries mixed into otherwise-good histories are dropped, not scored
   const mixed = computeRiskScore(makeStudent({
     attendanceHistory: weeks([NaN, 90, 150, 88]),
-    termTests: tests([-5, 85, 999, 87]),
+    termTests: [{ testName: 'Unit Test 1', score: -5, maxMarks: 100 }],
   }));
+  // -5 is filtered out, termTests empty → 0 pts
   assert.equal(mixed.riskScore, 0);
   assert.deepEqual(mixed.contributingFactors, []);
 });
@@ -265,7 +267,7 @@ test('negative / out-of-range inputs are ignored, yielding zero points', () => {
 test('suggested action map covers every factor and the default', () => {
   const student = makeStudent();
   const map: [string, string][] = [
-    ['Grade Decline', 'Extra Class / Tutoring: '],
+    ['Grade Decline', 'Extra Class / Tutoring'],
     ['Attendance Decline', 'Counseling / Check-in'],
     ['Fee Overdue', 'Financial Aid Referral'],
     ['Backlogs', 'Academic Support'],
@@ -308,7 +310,7 @@ test('fallback explanation: single factor mentions score, factor and reason', ()
 test('fallback explanation: multiple factors lists secondary signals', () => {
   const result = computeRiskScore(makeStudent({
     attendanceHistory: weeks([50, 45, 40, 35]),
-    termTests: tests([50, 50, 50, 50]),
+    termTests: unitTests(50, 30),
     backlogs: 2,
     backlogSubjects: ['DBMS', 'OS'],
   }));

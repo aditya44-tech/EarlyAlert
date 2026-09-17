@@ -92,10 +92,12 @@ function scoreAttendance(history: { week: string; percentage: number }[]) {
 }
 
 function scoreTermTests(termTests: { testName: string; score: number; maxMarks: number }[]) {
-  if (!termTests || termTests.length === 0) return { points: 0, reason: 'No unit test data.' };
+  // Filter to valid, named test entries only
+  const valid = termTests.filter(t => Number.isFinite(t.score) && t.score >= 0 && t.score <= 100);
+  if (valid.length === 0) return { points: 0, reason: 'No unit test data.' };
 
-  const ut1 = termTests.find(t => t.testName === 'Unit Test 1');
-  const ut2 = termTests.find(t => t.testName === 'Unit Test 2');
+  const ut1 = valid.find(t => t.testName === 'Unit Test 1');
+  const ut2 = valid.find(t => t.testName === 'Unit Test 2');
 
   if (!ut1 && !ut2) return { points: 0, reason: 'No unit test data.' };
 

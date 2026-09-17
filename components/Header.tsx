@@ -19,7 +19,7 @@ export function Header() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-black text-lg md:text-xl tracking-tight uppercase">
-                  EarlyAlert
+                  Sentinel
                 </span>
                 <span className="px-1.5 py-0.2 bg-[#D62828] text-white font-mono font-bold text-[10px] tracking-wider uppercase border border-white">
                   Predictive Engine
