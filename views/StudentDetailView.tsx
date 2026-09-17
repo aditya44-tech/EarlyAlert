@@ -39,63 +39,12 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const [groqError, setGroqError] = useState<string | null>(null);
   const lastFetchedId = useRef<string>('');
 
-  // Synchronize local state and auto-fetch Groq narrative when a new student is loaded
+  // Synchronize local state when a new student is loaded
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
     setIsGroqPowered(false);
     setGroqError(null);
-
-    // If already fetched for this student ID, don't refetch automatically
-    if (lastFetchedId.current === student.studentId) {
-      return;
-    }
-
-    let isMounted = true;
-    lastFetchedId.current = student.studentId;
-
-    const autoFetchGroq = async () => {
-      setIsAiLoading(true);
-      try {
-        const res = await fetch('/api/groq/explain', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'explain',
-            studentName: student.name,
-            department: student.department,
-            year: student.year,
-            riskScore: student.riskScore,
-            riskLevel: student.riskLevel,
-            contributingFactors: student.contributingFactors
-          })
-        });
-        if (!res.ok) throw new Error('API Error');
-        const data = await res.json();
-        if (isMounted) {
-          if (data.text) {
-            setGroqExplanation(data.text);
-          }
-          if (data.powered) {
-            setIsGroqPowered(true);
-          }
-        }
-      } catch {
-        if (isMounted) {
-          setGroqError('Groq API unavailable: showing structured analysis.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsAiLoading(false);
-        }
-      }
-    };
-
-    autoFetchGroq();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [student.studentId, student.name, student.department, student.year, student.riskScore, student.riskLevel, student.contributingFactors, student.aiExplanation]);
+  }, [student.aiExplanation, student.studentId]);
 
   const handleRefreshGroq = async () => {
     setIsAiLoading(true);
@@ -116,9 +65,20 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
       });
       if (!res.ok) throw new Error('API Error');
       const data = await res.json();
-      setGroqExplanation(data.text || student.aiExplanation);
+      
+      const newExplanation = data.text || student.aiExplanation;
+      setGroqExplanation(newExplanation);
       if (data.powered) {
         setIsGroqPowered(true);
+      }
+
+      // Persist the newly generated explanation to the database so it survives refreshes
+      if (data.text) {
+        await fetch(`/api/students/${student.studentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiExplanation: data.text })
+        });
       }
     } catch {
       setGroqError('Groq API unavailable: showing structured analysis.');
