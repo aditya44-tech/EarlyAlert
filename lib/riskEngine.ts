@@ -2,7 +2,7 @@
  * lib/riskEngine.ts
  * 
  * Pure server-side deterministic risk scoring engine.
- * No browser APIs, no import.meta.env — works in Next.js API routes and server components.
+ * No browser APIs, no import.meta.env; works in Next.js API routes and server components.
  * 
  * Groq API calls are handled by /api/groq/explain route (key stays server-side).
  */
@@ -160,7 +160,7 @@ function scoreFeeOverdue(overdueDays: number) {
   if (overdueDays > 30) pts = 15;
   else if (overdueDays > 10) pts = 12;
   else if (overdueDays > 0) pts = 6;
-  const reason = overdueDays === 0 ? 'Fee paid — no overdue balance.' : `Fee overdue by ${overdueDays} days`;
+  const reason = overdueDays === 0 ? 'Fee paid (no overdue balance).' : `Fee overdue by ${overdueDays} days`;
   return { points: pts, reason };
 }
 
@@ -228,7 +228,7 @@ export function computeRiskScore(student: RawStudentData): RiskResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fallback explanation (no Groq — pure structured text)
+// Fallback explanation (no Groq: pure structured text)
 // ─────────────────────────────────────────────────────────────────────────────
 export function generateFallbackExplanation(
   student: { name: string; department: string; year: number },
@@ -241,7 +241,7 @@ export function generateFallbackExplanation(
   const others = result.contributingFactors.slice(1, 3);
 
   let explanation = `${student.name} (Year ${student.year}, ${student.department}) has a ${result.riskLevel.toLowerCase()} dropout risk score of ${result.riskScore}/100. `;
-  explanation += `The primary concern is ${top.factor.toLowerCase()} — ${top.reason.toLowerCase()}. `;
+  explanation += `The primary concern is ${top.factor.toLowerCase()}: ${top.reason.toLowerCase()}. `;
 
   if (others.length === 1) {
     explanation += `This is compounded by ${others[0].factor.toLowerCase()}: ${others[0].reason.toLowerCase()}.`;

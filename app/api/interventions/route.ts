@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createIntervention, getAllInterventions, getStudentDetail } from '@/lib/db';
 import { MentorActionPayload } from '@/lib/types';
 
-// GET /api/interventions — list all intervention records
+// GET /api/interventions: list all intervention records
 export async function GET() {
   const interventions = getAllInterventions();
   return NextResponse.json({ interventions, count: interventions.length });
 }
 
-// POST /api/interventions — assign a new intervention
+// POST /api/interventions: assign a new intervention
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

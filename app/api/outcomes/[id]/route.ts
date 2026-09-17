@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOutcome } from '@/lib/db';
 
-// GET /api/outcomes/[id] — get before/after outcome comparison for a student
+// GET /api/outcomes/[id]: get before/after outcome comparison for a student
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const outcome = getOutcome(id);

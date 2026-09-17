@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/dbConnect';
+import dbConnect, { isDbConnected } from '@/lib/dbConnect';
 import { UploadHistory } from '@/lib/models';
+import { getUploadHistory, addUploadHistory, deleteUploadHistory } from '@/lib/db';
 
 export async function GET() {
   try {
-    await dbConnect();
-    const history = await UploadHistory.find({}).sort({ createdAt: -1 }).lean();
-    return NextResponse.json(history);
+    if (await isDbConnected()) {
+      try {
+        const history = await UploadHistory.find({}).sort({ createdAt: -1 }).lean();
+        if (history && history.length > 0) {
+          return NextResponse.json(history);
+        }
+      } catch (err: any) {
+        console.warn("MongoDB history find failed:", err.message);
+      }
+    }
+
+    return NextResponse.json(getUploadHistory());
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -14,10 +24,19 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    await dbConnect();
     const data = await req.json();
-    const newRecord = await UploadHistory.create(data);
-    return NextResponse.json({ success: true, record: newRecord });
+    const memoryRecord = addUploadHistory(data);
+
+    if (await isDbConnected()) {
+      try {
+        const newRecord = await UploadHistory.create(data);
+        return NextResponse.json({ success: true, record: newRecord });
+      } catch (err: any) {
+        console.warn("MongoDB history create failed:", err.message);
+      }
+    }
+
+    return NextResponse.json({ success: true, record: memoryRecord });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -25,18 +44,29 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    await dbConnect();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
+    const uploadedAt = searchParams.get('uploadedAt');
 
-    if (id) {
-      await UploadHistory.deleteOne({ id });
-      return NextResponse.json({ success: true });
-    } else {
-      await UploadHistory.deleteMany({});
-      return NextResponse.json({ success: true });
+    deleteUploadHistory(id || undefined, uploadedAt || undefined);
+
+    if (await isDbConnected()) {
+      try {
+        if (id) {
+          await UploadHistory.deleteOne({ id });
+        } else if (uploadedAt) {
+          await UploadHistory.deleteOne({ uploadedAt });
+        } else {
+          await UploadHistory.deleteMany({});
+        }
+      } catch (err: any) {
+        console.warn("MongoDB history delete failed:", err.message);
+      }
     }
+
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+

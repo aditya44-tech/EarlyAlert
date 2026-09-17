@@ -6,10 +6,25 @@ import {
   CheckCircle,
   HelpCircle,
   BookOpen,
-  ArrowRight,
   ShieldCheck,
   User,
 } from 'lucide-react';
+
+/**
+ * Mapping layer between internal risk-model factor names (used on the mentor dashboard)
+ * and student-friendly, supportive academic-feedback phrasing (used exclusively on the student portal).
+ */
+const STUDENT_FRIENDLY_FACTOR_MAP: Record<string, string> = {
+  'Grade Decline': 'Coursework performance',
+  'Low Engagement': 'Class participation',
+  'Attendance Decline': 'Attendance',
+  'Backlogs': 'Pending subjects',
+  'Fee Overdue': 'Administrative & fees',
+};
+
+export function toStudentFriendlyFactor(factor: string): string {
+  return STUDENT_FRIENDLY_FACTOR_MAP[factor] || factor;
+}
 
 interface StudentFacingStatusViewProps {
   statusData: StudentStatusData;
@@ -188,25 +203,28 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
             </div>
           </div>
 
-          {/* Student Academic Standing Summary (if available) */}
+          {/* Academic Focus Areas (Supportive, student-friendly phrasing: no raw numeric score or risk labels) */}
           {studentDetail && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-              <div className="p-4 bg-[#0D0D0D] text-white border-[3px] border-[#0D0D0D]">
-                <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Current Academic Standing</span>
-                <div className="text-3xl font-black font-mono mt-1 text-[#F4C430]">{100 - studentDetail.riskScore}<span className="text-sm">/100</span></div>
-                <div className="text-xs font-bold mt-1 text-neutral-300">Overall Health Score</div>
-              </div>
-              <div className="p-4 bg-white border-[3px] border-[#0D0D0D]">
-                 <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500">Key Areas for Improvement</span>
-                 <ul className="mt-2 text-xs font-bold text-[#0D0D0D] space-y-1 list-disc list-inside">
-                   {studentDetail.contributingFactors.slice(0,2).map(f => (
-                     <li key={f.factor}>{f.factor}</li>
-                   ))}
-                   {studentDetail.contributingFactors.length === 0 && (
-                     <li>Keep up the good work!</li>
-                   )}
-                 </ul>
-              </div>
+            <div className="p-4 bg-white border-2 border-[#0D0D0D] space-y-2 mt-4">
+              <span className="text-[11px] font-black uppercase tracking-wider text-neutral-500 block">
+                Academic Focus Areas
+              </span>
+              <p className="text-xs text-neutral-700 font-medium">
+                Your mentor has identified a few areas to focus on this term. See below:
+              </p>
+              <ul className="mt-2 text-xs font-bold text-[#0D0D0D] space-y-1.5 list-disc list-inside">
+                {studentDetail.contributingFactors && studentDetail.contributingFactors.length > 0 ? (
+                  studentDetail.contributingFactors.slice(0, 3).map((f) => (
+                    <li key={f.factor}>
+                      {toStudentFriendlyFactor(f.factor)}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-neutral-600 font-medium">
+                    All core academic milestones are on track. Keep up the good work!
+                  </li>
+                )}
+              </ul>
             </div>
           )}
 

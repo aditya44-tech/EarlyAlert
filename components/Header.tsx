@@ -14,7 +14,7 @@ export function Header() {
           {/* Logo / Brand */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#D62828] text-white flex items-center justify-center font-black text-xl border-2 border-white shadow-[2px_2px_0px_#FFFFFF]">
-              EA
+              S
             </div>
             <div>
               <div className="flex items-center gap-2">

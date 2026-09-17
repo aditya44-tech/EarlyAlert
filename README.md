@@ -14,7 +14,7 @@ This project was migrated from Vite to a full-stack **Next.js 15** architecture.
 - **Styling:** Tailwind CSS v4, Lucide React (Icons), Framer Motion (Animations)
 - **Backend / API:** Next.js Serverless Route Handlers
 - **AI Integration:** Groq API (`llama-3.1-8b-instant`) — processed 100% server-side for security.
-- **Data Persistence:** In-memory store (Ready to be swapped for MongoDB via Mongoose).
+- **Data Persistence:** MongoDB via Mongoose (with fallback in-memory store).
 - **Charts:** Recharts
 
 ---
@@ -24,8 +24,31 @@ This project was migrated from Vite to a full-stack **Next.js 15** architecture.
 1. **Deterministic Risk Engine:** A pure TypeScript, rule-based engine that calculates a 0-100 risk score based on weighted factors (Attendance 30%, Grades 25%, Backlogs 20%, Fees 15%, Engagement 10%).
 2. **AI Diagnostic Narratives:** Groq AI translates the raw numbers into concise, empathetic risk narratives for mentors.
 3. **Intervention Action Panel:** Mentors can assign customized interventions (Extra Classes, Counseling, Financial Aid) based on the AI's recommendations.
-4. **Outcome Tracking:** Compare baseline risk scores against post-intervention scores to measure success.
-5. **CSV Batch Upload:** Automatically update student data (attendance, grades, fees) via CSV uploads.
+4. **Outcome Tracking:** Compare baseline risk scores against post-intervention scores to measure success. Current score and checkpoint dates dynamically update with new data uploads.
+5. **CSV Batch Upload:** Automatically update student data (attendance, grades, fees) via CSV uploads. All uploads are logged and tracked in the history ledger.
+6. **Student Facing View:** Students log into their own portal to track their active interventions and assigned schedules.
+
+---
+
+## 🔄 Full Workflow
+
+### 1. Data Setup & Ingestion
+Student data is ingested via CSV batch uploads (Weekly Attendance, Term Tests, Backlogs, Fee Status). The data updates the MongoDB student profiles in real-time.
+
+### 2. Risk Scoring & Detection
+The engine calculates a continuous risk score (0-100) and categorizes students into Low, Medium, and High risk bands. High-risk students are flagged on the Mentor Dashboard. 
+
+### 3. Intervention Assignment
+The mentor clicks on a flagged student, reviews the AI-generated diagnostic narrative, and assigns an intervention. The system automatically recommends an intervention type (e.g., "Extra Class" for low grades, "Counseling" for low attendance).
+
+### 4. Student Visibility
+The assigned student receives the active intervention plan on their personal dashboard (e.g., "Extra Class assigned: Data Structures, Tue/Thu 4pm"). 
+
+### 5. Monitoring & Outcome Tracking
+As new data is uploaded in the following weeks, the system recalculates the student's current risk score. Mentors can view the **Outcome Comparison** screen to see a before-and-after trajectory (Baseline Risk vs. Current Risk) and determine if the intervention was successful (Improving, Worsening, or No Change).
+
+### 6. Resolution
+Once a student has stabilized, the mentor marks the intervention as "Resolved." Safeguards are in place to warn mentors if they attempt to resolve an intervention that hasn't shown significant improvement.
 
 ---
 
@@ -34,6 +57,7 @@ This project was migrated from Vite to a full-stack **Next.js 15** architecture.
 ### Prerequisites
 - Node.js (v18 or higher)
 - A [Groq API Key](https://console.groq.com/keys)
+- A MongoDB Connection String
 
 ### 1. Installation
 
@@ -44,15 +68,14 @@ npm install
 
 ### 2. Environment Variables
 
-Create a `.env` file in the root directory and add your Groq API key:
+Create a `.env` file in the root directory and add your API keys:
 ```env
 # Server-side only (never exposed to the browser)
 GROQ_API_KEY=gsk_your_api_key_here
 
-# (Optional) MongoDB connection URI
-MONGODB_URI=
+# MongoDB connection URI (Required for persistence)
+MONGODB_URI=mongodb+srv://...
 ```
-*(Note: If MongoDB is not configured, the app will run seamlessly using a seeded in-memory data store containing 50 mock students).*
 
 ### 3. Run the Development Server
 
@@ -70,15 +93,17 @@ Open [http://localhost:3000](http://localhost:3000) in your browser to view the 
 ```text
 hack2ignite/
 ├── app/
-│   ├── api/                 # Next.js API Routes (Students, Interventions, Groq proxy)
+│   ├── api/                 # Next.js API Routes (Students, Interventions, History, Groq)
 │   ├── _app/                # Main client application wrapper
 │   ├── layout.tsx           # Root layout and metadata
 │   └── page.tsx             # Entry point
 ├── components/              # Reusable UI components (Badges, Charts, Cards)
 ├── lib/
-│   ├── db.ts                # In-memory database & schema (MongoDB ready)
+│   ├── db.ts                # In-memory database & Mongoose fallbacks
+│   ├── dbConnect.ts         # MongoDB Connection Utility
+│   ├── models.ts            # Mongoose Schemas (Student, UploadHistory, Outcome)
 │   ├── riskEngine.ts        # The deterministic scoring engine
-│   ├── mockData.ts          # Seed data for 50 initial students
+│   ├── mockData.ts          # Seed data for initial students
 │   └── types.ts             # TypeScript interfaces
 ├── views/                   # Major application screens (Dashboard, Detail, Action Panel)
 └── .env                     # Environment variables

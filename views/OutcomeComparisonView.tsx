@@ -34,7 +34,7 @@ function DetailCell({ label, value }: { label: string; value: string }) {
 }
 
 function InterventionDetailsGrid({ type, details }: { type: string; details: Record<string, unknown> }) {
-  const str = (v: unknown, fallback = '—') => v ? String(v) : fallback;
+  const str = (v: unknown, fallback = '-') => v ? String(v) : fallback;
 
   switch (type) {
     case 'Extra Class':
@@ -115,7 +115,7 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
   const handleMarkResolved = () => {
     if (!hasImprovedSignificantly) {
       const confirmed = window.confirm(
-        `Risk score hasn't improved significantly (only ${Math.abs(data.scoreDelta)} pts so far) — are you sure you want to mark this resolved?`
+        `Risk score hasn't improved significantly (only ${Math.abs(data.scoreDelta)} pts so far). Are you sure you want to mark this resolved?`
       );
       if (!confirmed) return;
     }
@@ -157,7 +157,7 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
                 {data.studentId}
               </span>
               <h1 className="text-2xl md:text-3xl font-black text-[#0D0D0D] mt-1">
-                {data.name} — Intervention Evaluation
+                {data.name} : Intervention Evaluation
               </h1>
             </div>
 
@@ -184,7 +184,7 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
             <span className="text-[#D62828] uppercase">{data.intervention.type}</span>
             {' '}started on{' '}
             <span className="font-mono underline">{data.intervention.startDate}</span>
-            {' '}&mdash;{' '}
+            {' '}•{' '}
             {isAwaiting ? (
               <span className="px-1.5 py-0.5 border border-[#0D0D0D] bg-neutral-500 text-white font-extrabold uppercase text-xs">
                 Awaiting New Data
@@ -260,7 +260,7 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
               <div className="flex items-baseline gap-1 mt-2">
                 {isAwaiting ? (
                   <span className="text-2xl font-black font-mono text-neutral-400 italic">
-                    —
+                    N/A
                   </span>
                 ) : (
                   <>

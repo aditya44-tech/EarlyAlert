@@ -605,7 +605,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   Uploaded CSV Data
                 </h3>
                 <p className="text-sm font-bold text-neutral-600">
-                  {viewingRawData.week} — {viewingRawData.type.replace('_', ' ').toUpperCase()} {viewingRawData.fileName ? `(${viewingRawData.fileName})` : ''}
+                  {viewingRawData.week} : {viewingRawData.type.replace('_', ' ').toUpperCase()} {viewingRawData.fileName ? `(${viewingRawData.fileName})` : ''}
                 </p>
               </div>
               <button

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveIntervention, getOutcome } from '@/lib/db';
 
-// PATCH /api/interventions/[id]/resolve — mark intervention as resolved
+// PATCH /api/interventions/[id]/resolve: mark intervention as resolved
 export async function PATCH(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -230,7 +230,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
         </div>
       )}
 
-      {/* Main Intervention Form Card — hidden after submission */}
+      {/* Main Intervention Form Card - hidden after submission */}
       {!submittedPayload && (
       <div className="neo-card p-6 md:p-8 bg-white">
         <div className="border-b-2 border-[#0D0D0D] pb-4 mb-6">

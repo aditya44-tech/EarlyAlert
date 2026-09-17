@@ -39,17 +39,67 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const [groqError, setGroqError] = useState<string | null>(null);
   const lastFetchedId = useRef<string>('');
 
-  // Synchronize local state when a new student is loaded
+  // Synchronize local state and auto-fetch Groq narrative when a new student is loaded
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
     setIsGroqPowered(false);
     setGroqError(null);
-  }, [student.studentId, student.aiExplanation]);
+
+    // If already fetched for this student ID, don't refetch automatically
+    if (lastFetchedId.current === student.studentId) {
+      return;
+    }
+
+    let isMounted = true;
+    lastFetchedId.current = student.studentId;
+
+    const autoFetchGroq = async () => {
+      setIsAiLoading(true);
+      try {
+        const res = await fetch('/api/groq/explain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'explain',
+            studentName: student.name,
+            department: student.department,
+            year: student.year,
+            riskScore: student.riskScore,
+            riskLevel: student.riskLevel,
+            contributingFactors: student.contributingFactors
+          })
+        });
+        if (!res.ok) throw new Error('API Error');
+        const data = await res.json();
+        if (isMounted) {
+          if (data.text) {
+            setGroqExplanation(data.text);
+          }
+          if (data.powered) {
+            setIsGroqPowered(true);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setGroqError('Groq API unavailable: showing structured analysis.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsAiLoading(false);
+        }
+      }
+    };
+
+    autoFetchGroq();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [student.studentId, student.name, student.department, student.year, student.riskScore, student.riskLevel, student.contributingFactors, student.aiExplanation]);
 
   const handleRefreshGroq = async () => {
     setIsAiLoading(true);
     setGroqError(null);
-    lastFetchedId.current = ''; // force re-fetch
     try {
       const res = await fetch('/api/groq/explain', {
         method: 'POST',
@@ -71,7 +121,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         setIsGroqPowered(true);
       }
     } catch {
-      setGroqError('Groq API unavailable — showing structured analysis.');
+      setGroqError('Groq API unavailable: showing structured analysis.');
     } finally {
       setIsAiLoading(false);
       lastFetchedId.current = student.studentId;
@@ -238,26 +288,25 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
           </button>
         </div>
 
-        {isAiLoading ? (
-          <div className="p-4 bg-neutral-100 border-2 border-dashed border-[#0D0D0D] space-y-2 animate-pulse">
-            <div className="h-4 bg-neutral-300 w-3/4"></div>
-            <div className="h-4 bg-neutral-300 w-full"></div>
-            <div className="h-4 bg-neutral-300 w-2/3"></div>
-            <span className="text-[11px] font-mono text-neutral-500 block pt-1">
-              Connecting to Groq API (qwen/qwen3.8-27b)...
-            </span>
-          </div>
-        ) : (
-          <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] text-sm text-[#0D0D0D] font-medium leading-relaxed">
-            <div className="flex items-start gap-2.5">
-              <span className="w-3 h-3 bg-[#D62828] shrink-0 mt-1 border border-[#0D0D0D]" />
-              <p>{groqExplanation}</p>
+        <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] text-sm text-[#0D0D0D] font-medium leading-relaxed">
+          <div className="flex items-start gap-2.5">
+            <span className="w-3 h-3 bg-[#D62828] shrink-0 mt-1 border border-[#0D0D0D]" />
+            <div className="space-y-2 flex-1">
+              <p className={isAiLoading ? 'opacity-75 transition-opacity' : ''}>
+                {groqExplanation || 'Generating diagnostic analysis...'}
+              </p>
+              {isAiLoading && (
+                <div className="flex items-center gap-2 text-xs font-bold text-neutral-600 pt-1">
+                  <RefreshCw className="w-3 h-3 animate-spin text-[#D62828]" />
+                  <span>Synthesizing live narrative via Groq (qwen/qwen3.8-27b)...</span>
+                </div>
+              )}
             </div>
-            {groqError && (
-              <p className="text-[11px] text-neutral-500 mt-2 font-mono">{groqError}</p>
-            )}
           </div>
-        )}
+          {groqError && (
+            <p className="text-[11px] text-neutral-500 mt-2 font-mono">{groqError}</p>
+          )}
+        </div>
       </div>
 
       {/* Contributing Risk Factors Breakdown */}

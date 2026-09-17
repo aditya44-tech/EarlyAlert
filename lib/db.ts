@@ -41,7 +41,7 @@ let interventionsLog: InterventionRecord[] = [
     studentId: 'S006',
     type: 'Extra Class',
     details: { subject: 'Data Structures & DBMS', schedule: 'Tue/Thu 4:00 PM', instructor: 'Dr. Mehta' },
-    notes: 'Student has 3 backlogs and declining attendance — extra class for core subjects.',
+    notes: 'Student has 3 backlogs and declining attendance: extra class for core subjects.',
     assignedBy: 'mentor-demo',
     startDate: '2026-09-02',
     baselineRiskScore: detailsStore['S006']?.riskScore ?? 78,
@@ -129,7 +129,7 @@ export function createIntervention(payload: MentorActionPayload, baselineRiskSco
     },
   };
 
-  // Store only the immutable baseline — current score will be recalculated at read time
+  // Store only the immutable baseline: current score will be recalculated at read time
   outcomeStore[payload.studentId] = {
     studentId: payload.studentId,
     name: detail?.name ?? '',
@@ -236,3 +236,72 @@ export function bulkUpdateStudents(
   }
   return count;
 }
+
+export function upsertStudent(student: any): void {
+  const sid = student.studentId;
+  if (!sid) return;
+
+  const existing = detailsStore[sid] || {};
+  detailsStore[sid] = {
+    ...existing,
+    ...student,
+  };
+
+  const summaryItem: StudentSummary = {
+    studentId: sid,
+    name: student.name ?? existing.name ?? sid,
+    department: student.department ?? existing.department ?? 'Computer Science',
+    year: student.year ?? existing.year ?? 1,
+    riskScore: student.riskScore ?? existing.riskScore ?? 0,
+    riskLevel: student.riskLevel ?? existing.riskLevel ?? 'Low',
+    interventionStatus: student.interventionStatus ?? existing.interventionStatus ?? 'None',
+  };
+
+  const idx = studentsStore.findIndex(s => s.studentId === sid);
+  if (idx !== -1) {
+    studentsStore[idx] = summaryItem;
+  } else {
+    studentsStore.push(summaryItem);
+  }
+}
+
+export function bulkUpsertStudents(students: any[]): number {
+  let count = 0;
+  for (const s of students) {
+    upsertStudent(s);
+    count++;
+  }
+  return count;
+}
+
+export function clearAllStudents(): void {
+  studentsStore = [];
+  detailsStore = {};
+}
+
+let uploadHistoryStore: any[] = [];
+
+export function getUploadHistory(): any[] {
+  return uploadHistoryStore;
+}
+
+export function addUploadHistory(record: any): any {
+  const newRec = {
+    id: record.id || `UPL-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    ...record,
+  };
+  uploadHistoryStore = [newRec, ...uploadHistoryStore];
+  return newRec;
+}
+
+export function deleteUploadHistory(id?: string, uploadedAt?: string): void {
+  if (id) {
+    uploadHistoryStore = uploadHistoryStore.filter(u => u.id !== id);
+  } else if (uploadedAt) {
+    uploadHistoryStore = uploadHistoryStore.filter(u => u.uploadedAt !== uploadedAt);
+  } else {
+    uploadHistoryStore = [];
+  }
+}
+

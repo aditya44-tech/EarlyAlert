@@ -65,7 +65,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ students, onLogin }) => {
       <div className="mb-8 text-center">
         <div className="inline-flex items-center gap-3 mb-3">
           <div className="w-12 h-12 bg-[#D62828] text-white flex items-center justify-center font-black text-2xl border-3 border-[#0D0D0D] shadow-[4px_4px_0px_#0D0D0D]">
-            EA
+            S
           </div>
           <div className="text-left">
             <div className="font-black text-2xl uppercase tracking-tight text-[#0D0D0D]">Sentinel</div>

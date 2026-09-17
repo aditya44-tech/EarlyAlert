@@ -266,12 +266,12 @@ export const studentDetailsMap: Record<string, StudentDetail> = detailsMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pre-seeded intervention demos (for demo/showcase purposes)
-// Shows the full Phase 5–9 workflow for 3 high-risk students
+// Shows the full Phase 5-9 workflow for 3 high-risk students
 // ─────────────────────────────────────────────────────────────────────────────
 
-// S006 - Kabir Kale (High Risk, declining, 3 backlogs) — Extra Class assigned
-// S019 - Radhika Reddy (High Risk, declining, 3 backlogs, fee overdue) — Counseling assigned
-// S022 - Ruchi Reddy (High Risk, stable_low, 3 backlogs) — Academic Support assigned
+// S006 - Kabir Kale (High Risk, declining, 3 backlogs): Extra Class assigned
+// S019 - Radhika Reddy (High Risk, declining, 3 backlogs, fee overdue): Counseling assigned
+// S022 - Ruchi Reddy (High Risk, stable_low, 3 backlogs): Academic Support assigned
 
 export const studentStatusMap: Record<string, StudentStatusData> = {
   S006: {

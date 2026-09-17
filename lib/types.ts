@@ -1,5 +1,5 @@
 /**
- * lib/types.ts — Shared types (identical to src/types.ts)
+ * lib/types.ts: Shared types (identical to src/types.ts)
  */
 
 export type RiskLevel = 'Low' | 'Medium' | 'High';
