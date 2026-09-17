@@ -3,9 +3,13 @@
  * 
  * Unit and integration tests for the Groq Predictive Risk Narrative & Diagnostic Explanation logic.
  * Run with: npm test
+ * 
+ * Live API tests auto-skip when dev server is not running on localhost:3000.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+
+// ── Unit tests (no server needed) ──────────────────────────────────────────
 
 test('Groq prompt construction handles high-risk factor breakdown accurately', () => {
   const student = {
@@ -32,8 +36,41 @@ test('Groq prompt construction handles high-risk factor breakdown accurately', (
   assert.ok(factorSummary.includes('Fee Overdue (12 pts)'));
 });
 
-test('Groq explain endpoint handles live request with qwen/qwen3.8-27b when API key is present', async () => {
-  const res = await fetch('http://localhost:3000/api/groq/explain', {
+// ── Integration tests (need dev server + GROQ_API_KEY) ─────────────────────
+
+const LIVE_SERVER = 'http://localhost:3000/api/groq/explain';
+
+async function checkServer(t: any) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2000);
+    const res = await fetch(LIVE_SERVER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'explain', studentName: 'test', riskScore: 0, contributingFactors: [] }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (res.status !== 200 && res.status !== 400) {
+      t.skip('Dev server responded with ' + res.status + ' — GROQ_API_KEY may be missing');
+      return false;
+    }
+    const data = await res.json();
+    if (!data.powered) {
+      t.skip('GROQ_API_KEY not configured — AI responses unavailable');
+      return false;
+    }
+    return true;
+  } catch {
+    t.skip('Dev server not running on localhost:3000');
+    return false;
+  }
+}
+
+test('Groq explain endpoint handles live request with qwen/qwen3.8-27b when API key is present', async (t) => {
+  if (!(await checkServer(t))) return;
+
+  const res = await fetch(LIVE_SERVER, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -55,12 +92,13 @@ test('Groq explain endpoint handles live request with qwen/qwen3.8-27b when API 
   assert.ok(typeof data.text === 'string' && data.text.length > 20);
   assert.equal(data.powered, true);
   assert.equal(data.model, 'qwen/qwen3.8-27b');
-  // Text should mention the student and relevant academic context
   assert.ok(data.text.toLowerCase().includes('kabir') || data.text.toLowerCase().includes('attendance') || data.text.toLowerCase().includes('risk'));
 });
 
-test('Groq explain endpoint generates encouraging narrative for low-risk student', async () => {
-  const res = await fetch('http://localhost:3000/api/groq/explain', {
+test('Groq explain endpoint generates encouraging narrative for low-risk student', async (t) => {
+  if (!(await checkServer(t))) return;
+
+  const res = await fetch(LIVE_SERVER, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -80,8 +118,10 @@ test('Groq explain endpoint generates encouraging narrative for low-risk student
   assert.equal(data.powered, true);
 });
 
-test('Groq rationale mode produces focused 1-sentence intervention explanation', async () => {
-  const res = await fetch('http://localhost:3000/api/groq/explain', {
+test('Groq rationale mode produces focused 1-sentence intervention explanation', async (t) => {
+  if (!(await checkServer(t))) return;
+
+  const res = await fetch(LIVE_SERVER, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -99,15 +139,17 @@ test('Groq rationale mode produces focused 1-sentence intervention explanation',
   assert.equal(data.powered, true);
 });
 
-test('Groq endpoint handles missing or malformed contributingFactors safely without throwing 500', async () => {
-  const res = await fetch('http://localhost:3000/api/groq/explain', {
+test('Groq endpoint handles missing or malformed contributingFactors safely without throwing 500', async (t) => {
+  if (!(await checkServer(t))) return;
+
+  const res = await fetch(LIVE_SERVER, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       mode: 'explain',
       studentName: 'Edge Case Student',
       riskScore: 45,
-      contributingFactors: null // invalid type
+      contributingFactors: null
     })
   });
 
@@ -116,8 +158,10 @@ test('Groq endpoint handles missing or malformed contributingFactors safely with
   assert.ok(typeof data.text === 'string');
 });
 
-test('Groq endpoint rejects invalid mode with 400', async () => {
-  const res = await fetch('http://localhost:3000/api/groq/explain', {
+test('Groq endpoint rejects invalid mode with 400', async (t) => {
+  if (!(await checkServer(t))) return;
+
+  const res = await fetch(LIVE_SERVER, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -59,6 +59,11 @@ function slope(values: number[]): number {
 // Scoring sub-functions
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Linearly interpolate between two points. */
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * clamp(t, 0, 1);
+}
+
 function scoreAttendance(history: { week: string; percentage: number }[]) {
   const vals = history.slice(-4)
     .map(h => h.percentage)
@@ -71,72 +76,104 @@ function scoreAttendance(history: { week: string; percentage: number }[]) {
   const attSlope = slope(vals);
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
 
+  // Smooth base-points calculation using linear interpolation within each band
+  // instead of hard step functions, so scores change gradually at tier boundaries.
   let pts = 0;
-  if (latest < 60) pts = 30;
-  else if (latest < 75) {
-    pts = 20;
+  if (latest < 60) {
+    pts = 30;
+  } else if (latest < 75) {
+    // Interpolate: 75% → 20 pts, 60% → 30 pts
+    pts = lerp(30, 20, (latest - 60) / 15);
     if (drop >= 15 || attSlope < -2) pts = Math.min(30, pts + 8);
   } else if (latest < 85) {
-    pts = 8;
+    // Interpolate: 85% → 8 pts, 75% → 20 pts
+    pts = lerp(20, 8, (latest - 75) / 10);
     if (drop >= 15 || attSlope < -3) pts = Math.min(30, pts + 10);
   } else {
+    // 85%+ base is 0, but sharp drops still trigger concern
     if (drop >= 15 || attSlope < -4) pts = 12;
     else if (drop >= 8) pts = 5;
   }
 
-  pts = clamp(pts, 0, 30);
+  // Round to nearest integer to prevent floating point overflow in UI
+  pts = Math.round(clamp(pts, 0, 30));
   const trendLabel = attSlope < -2 ? 'declining trend' : attSlope > 2 ? 'improving trend' : 'stable';
   let reason = `Latest attendance: ${latest}% (avg ${avg.toFixed(0)}%, ${trendLabel})`;
   if (drop >= 15) reason += `, dropped ${drop.toFixed(0)}% over recent weeks`;
   return { points: pts, reason };
 }
 
+const RECOGNIZED_TESTS = ['unit test 1', 'unit test 2'];
+
+function normalizeTestName(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/** Score a single test score against the baseline tier table (same for UT1 and standalone UT2). */
+function baselineTierPoints(score: number): number {
+  if (score < 40) return 25;
+  if (score < 55) return 18;
+  if (score < 65) return 12;
+  if (score < 75) return 5;
+  return 0;
+}
+
 function scoreTermTests(termTests: { testName: string; score: number; maxMarks: number }[]) {
-  // Filter to valid, named test entries only
+  // Filter to valid-score entries, then normalize names for fuzzy matching
   const valid = termTests.filter(t => Number.isFinite(t.score) && t.score >= 0 && t.score <= 100);
   if (valid.length === 0) return { points: 0, reason: 'No unit test data.' };
 
-  const ut1 = valid.find(t => t.testName === 'Unit Test 1');
-  const ut2 = valid.find(t => t.testName === 'Unit Test 2');
+  // Warn on unrecognized test names so data issues are visible during testing
+  for (const t of valid) {
+    const normalized = normalizeTestName(t.testName);
+    if (!RECOGNIZED_TESTS.includes(normalized)) {
+      console.warn(`[riskEngine] Unrecognized term test name "${t.testName}" (normalized: "${normalized}") — will be excluded from scoring.`);
+    }
+  }
 
-  if (!ut1 && !ut2) return { points: 0, reason: 'No unit test data.' };
+  // Match by normalized name (trim + lowercase)
+  const ut1 = valid.find(t => normalizeTestName(t.testName) === 'unit test 1');
+  const ut2 = valid.find(t => normalizeTestName(t.testName) === 'unit test 2');
+
+  if (!ut1 && !ut2) return { points: 0, reason: 'No recognized unit test data.' };
 
   let pts = 0;
   let reason = '';
 
   if (ut1 && !ut2) {
+    // UT1 only — score against baseline tiers
     const score = ut1.score;
-    if (score < 40) pts = 25;
-    else if (score < 55) pts = 18;
-    else if (score < 65) pts = 12;
-    else if (score < 75) pts = 5;
+    pts = baselineTierPoints(score);
     reason = `Unit Test 1 score: ${score}% (Baseline)`;
   } else if (ut2) {
     const score2 = ut2.score;
-    const score1 = ut1 ? ut1.score : score2;
     
-    // Evaluate UT2 directly
-    if (score2 < 40) pts = 25;
-    else if (score2 < 55) pts = 18;
-    else if (score2 < 65) pts = 12;
-    else if (score2 < 75) pts = 5;
+    if (ut1) {
+      // Both UT1 and UT2 present — score UT2 and apply delta signal
+      const score1 = ut1.score;
+      pts = baselineTierPoints(score2);
 
-    // Apply recovery/decline signal
-    const diff = score2 - score1;
-    if (diff >= 15) {
-      pts = Math.max(0, pts - 15); // Strong recovery
-      reason = `Unit Test 2 score: ${score2}% (Significant improvement of +${diff}%)`;
-    } else if (diff >= 5) {
-      pts = Math.max(0, pts - 5);
-      reason = `Unit Test 2 score: ${score2}% (Improvement of +${diff}%)`;
-    } else if (diff < -15) {
-      pts = Math.min(25, pts + 10);
-      reason = `Unit Test 2 score: ${score2}% (Significant decline of ${diff}%)`;
-    } else if (diff < -5) {
-      pts = Math.min(25, pts + 5);
-      reason = `Unit Test 2 score: ${score2}% (Decline of ${diff}%)`;
+      const diff = score2 - score1;
+      if (diff >= 15) {
+        pts = Math.max(0, pts - 15); // Strong recovery
+        reason = `Unit Test 2 score: ${score2}% (Significant improvement of +${diff}%)`;
+      } else if (diff >= 5) {
+        pts = Math.max(0, pts - 5);
+        reason = `Unit Test 2 score: ${score2}% (Improvement of +${diff}%)`;
+      } else if (diff < -15) {
+        pts = Math.min(25, pts + 10);
+        reason = `Unit Test 2 score: ${score2}% (Significant decline of ${diff}%)`;
+      } else if (diff < -5) {
+        pts = Math.min(25, pts + 5);
+        reason = `Unit Test 2 score: ${score2}% (Decline of ${diff}%)`;
+      } else {
+        reason = `Unit Test 2 score: ${score2}% (Stable)`;
+      }
     } else {
-      reason = `Unit Test 2 score: ${score2}% (Stable)`;
+      // UT2 only (no UT1) — score against baseline tiers directly
+      // This ensures a low UT2-only score still contributes risk points
+      pts = baselineTierPoints(score2);
+      reason = `Unit Test 2 score: ${score2}% (Baseline — no Unit Test 1 data)`;
     }
   }
 
@@ -205,10 +242,10 @@ export function computeRiskScore(student: RawStudentData): RiskResult {
   const feeResult = scoreFeeOverdue(student.feeOverdueDays);
   const engResult = scoreEngagement(student.submissionRate);
 
-  const total = clamp(
+  const total = Math.round(clamp(
     attResult.points + gradeResult.points + backlogResult.points + feeResult.points + engResult.points,
     0, 100
-  );
+  ));
 
   const riskLevel: RiskLevel = total >= 61 ? 'High' : total >= 31 ? 'Medium' : 'Low';
 

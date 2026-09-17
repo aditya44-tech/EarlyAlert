@@ -94,9 +94,29 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     let updatedCount = 0;
     let skippedCount = 0;
 
+    // Snapshot original state of each affected student BEFORE making changes
+    // This allows clean revert when the upload is deleted
+    const snapshots: Record<string, any> = {};
+
     parsedData.forEach(row => {
       const sid = row.studentId?.trim();
       if (!sid) { skippedCount++; return; }
+
+      // Save snapshot of original state before any modifications
+      if (newDetails[sid] && !snapshots[sid]) {
+        const orig = newDetails[sid];
+        snapshots[sid] = {
+          attendanceHistory: JSON.parse(JSON.stringify(orig.attendanceHistory || [])),
+          subjectAttendance: JSON.parse(JSON.stringify(orig.subjectAttendance || [])),
+          termTests: JSON.parse(JSON.stringify(orig.termTests || [])),
+          backlogCount: orig.backlogCount ?? 0,
+          backlogSubjects: JSON.parse(JSON.stringify(orig.backlogSubjects || [])),
+          feeOverdueDays: orig.feeOverdueDays ?? 0,
+          feeStatus: orig.feeStatus || 'Paid',
+          lastSemResult: JSON.parse(JSON.stringify(orig.lastSemResult || { score: 0, maxMarks: 0 })),
+          endSemResult: JSON.parse(JSON.stringify(orig.endSemResult || { status: 'Upcoming' })),
+        };
+      }
 
       if (!newDetails[sid]) {
         const name = row.name?.trim() || sid;
@@ -104,6 +124,8 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
           studentId: sid, name, department: row.department?.trim() || 'Computer Science', year: parseInt(row.year, 10) || 1,
           riskScore: 0, riskLevel: 'Low', contributingFactors: [], attendanceHistory: [], subjectAttendance: [], termTests: [], endSemResult: { status: 'Upcoming' }, lastSemResult: { score: 0, maxMarks: 0 }, aiExplanation: '', suggestedAction: 'Monitor', interventionStatus: 'None'
         };
+        // Mark as created by this upload (no snapshot needed — delete will remove student)
+        snapshots[sid] = null;
         if (!newStudents.find(s => s.studentId === sid)) {
           newStudents.push({ studentId: sid, name, department: newDetails[sid].department, year: newDetails[sid].year, riskScore: 0, riskLevel: 'Low', interventionStatus: 'None' });
         }
@@ -113,10 +135,43 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
 
       if (uploadType === 'WeeklyAttendance') {
         const att = parseFloat(row.attendance);
+        // If CSV has its own "week" column (new overall format), prefer that over the UI-provided label
+        const effectiveWeekLabel = row.week?.trim() || weekLabel;
         if (!isNaN(att)) {
-          // Upsert by week label — replace existing entry for same week, otherwise append
-          const withoutThisWeek = existing.attendanceHistory.filter(h => h.week !== weekLabel);
-          existing.attendanceHistory = [...withoutThisWeek, { week: weekLabel, percentage: att }];
+          // Parse subject attendance columns from CSV (e.g., "DBMS_attendance", "CN_attendance")
+          const subjectCols = Object.keys(row).filter(k => k.endsWith('_attendance'));
+          const subjectBreakdown = subjectCols.map(k => ({
+            subject: k.replace('_attendance', '').trim(),
+            percentage: parseFloat(row[k])
+          })).filter(s => !isNaN(s.percentage));
+
+          // Merge with any existing subject data for this week
+          const existingWeek = existing.attendanceHistory.find(h => h.week === effectiveWeekLabel);
+          let mergedSubjects = subjectBreakdown;
+          if (existingWeek?.subjects && existingWeek.subjects.length > 0) {
+            mergedSubjects = [...existingWeek.subjects];
+            for (const newSub of subjectBreakdown) {
+              const idx = mergedSubjects.findIndex(s => s.subject === newSub.subject);
+              if (idx !== -1) mergedSubjects[idx] = newSub;
+              else mergedSubjects.push(newSub);
+            }
+          }
+
+          const withoutThisWeek = existing.attendanceHistory.filter(h => h.week !== effectiveWeekLabel);
+          existing.attendanceHistory = [...withoutThisWeek, {
+            week: effectiveWeekLabel,
+            percentage: att,
+            subjects: mergedSubjects.length > 0 ? mergedSubjects : undefined,
+          }];
+          
+          // Also update the top-level subjectAttendance with this latest data
+          if (mergedSubjects.length > 0) {
+            existing.subjectAttendance = mergedSubjects.map(sub => ({
+              subject: sub.subject,
+              week: effectiveWeekLabel,
+              percentage: sub.percentage
+            }));
+          }
           const raw: RawStudentData = {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
             attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
@@ -126,17 +181,6 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
           existing.aiExplanation = generateFallbackExplanation({ name: existing.name, department: existing.department, year: existing.year }, result);
-        }
-      } else if (uploadType === 'SubjectAttendance') {
-        const subs = Object.keys(row).filter(k => k.endsWith('_attendance'));
-        const newSubjects = subs.map(k => ({
-          subject: k.replace('_attendance', '').trim(),
-          week: weekLabel,
-          percentage: parseFloat(row[k])
-        })).filter(s => !isNaN(s.percentage));
-        
-        if (newSubjects.length > 0) {
-          existing.subjectAttendance = newSubjects;
         }
       } else if (uploadType === 'UnitTest1' || uploadType === 'UnitTest2') {
         const score = parseFloat(row.score);
@@ -223,9 +267,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     fetch('/api/students', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(studentsArray)
-    }).catch(e => console.error('Student sync failed', e));
-
-    const newLog: UploadLog = {
+    }).catch(e => console.error('Student sync failed', e));    const newLog: UploadLog = {
       uploadedAt: new Date().toISOString(),
       fileName: fileName || `dataset_${uploadType}.csv`,
       week: weekLabel || 'Initial',
@@ -233,12 +275,14 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       studentsUpdated: updatedCount,
       uploadedBy: 'Mentor',
       rawData: parsedData,
+      snapshots: snapshots,
     } as unknown as UploadLog;
     
     setUploadHistory(prev => [newLog, ...prev]);
     fetch('/api/history', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...newLog, rawData: parsedData })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newLog, rawData: parsedData, snapshots })
     }).catch(e => console.error('History sync failed', e));
 
     return { success: true, updatedCount, skippedCount };
@@ -253,6 +297,111 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleDeleteUpload = async (uploadedAt: string) => {
+    // Find the upload log to get the snapshot data needed for clean revert
+    const uploadLog = uploadHistory.find(log => log.uploadedAt === uploadedAt);
+    if (!uploadLog) {
+      await fetch(`/api/history?uploadedAt=${encodeURIComponent(uploadedAt)}`, { method: 'DELETE' });
+      setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
+      return;
+    }
+
+    const snapshots = (uploadLog as any).snapshots as Record<string, any> | null;
+    const rawData = (uploadLog as any).rawData;
+
+    if (rawData && Array.isArray(rawData)) {
+      const newDetails = { ...detailsMap };
+      const newStudents = [...students];
+
+      rawData.forEach((row: any) => {
+        const sid = row.studentId?.trim();
+        if (!sid) return;
+
+        // Student was CREATED by this upload (no snapshot) — remove entirely
+        if (snapshots && snapshots[sid] === null) {
+          delete newDetails[sid];
+          const idx = newStudents.findIndex(s => s.studentId === sid);
+          if (idx !== -1) newStudents.splice(idx, 1);
+          return;
+        }
+
+        if (!newDetails[sid]) return;
+
+        const existing = { ...newDetails[sid] };
+
+        // Restore from snapshot if available (perfect revert)
+        if (snapshots && snapshots[sid]) {
+          const snap = snapshots[sid];
+          existing.attendanceHistory = JSON.parse(JSON.stringify(snap.attendanceHistory));
+          existing.subjectAttendance = JSON.parse(JSON.stringify(snap.subjectAttendance));
+          existing.termTests = JSON.parse(JSON.stringify(snap.termTests));
+          existing.backlogCount = snap.backlogCount;
+          existing.backlogSubjects = JSON.parse(JSON.stringify(snap.backlogSubjects));
+          existing.feeOverdueDays = snap.feeOverdueDays;
+          existing.feeStatus = snap.feeStatus;
+          existing.lastSemResult = JSON.parse(JSON.stringify(snap.lastSemResult));
+          existing.endSemResult = JSON.parse(JSON.stringify(snap.endSemResult));
+        } else {
+          // No snapshot — fall back to removing the specific upload entries
+          if (uploadLog.type === 'WeeklyAttendance') {
+            existing.attendanceHistory = existing.attendanceHistory.filter(h => h.week !== uploadLog.week);
+          } else if (uploadLog.type === 'UnitTest1') {
+            existing.termTests = existing.termTests.filter(t => t.testName !== 'Unit Test 1');
+          } else if (uploadLog.type === 'UnitTest2') {
+            existing.termTests = existing.termTests.filter(t => t.testName !== 'Unit Test 2');
+          } else if (uploadLog.type === 'Backlogs') {
+            existing.backlogCount = 0;
+            existing.backlogSubjects = [];
+          } else if (uploadLog.type === 'FeeStatus') {
+            existing.feeOverdueDays = 0;
+            existing.feeStatus = 'Paid';
+          } else if (uploadLog.type === 'LastSemResult') {
+            existing.lastSemResult = { score: 0, maxMarks: 0 };
+          } else if (uploadLog.type === 'EndSemResult') {
+            existing.endSemResult = { status: 'Upcoming' };
+          }
+        }
+
+        // Recalculate risk score from restored data
+        const raw: RawStudentData = {
+          studentId: sid, name: existing.name, department: existing.department, year: existing.year,
+          attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
+          backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: existing.feeOverdueDays || 0,
+          submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+        };
+        const result = computeRiskScore(raw);
+        existing.riskScore = result.riskScore;
+        existing.riskLevel = result.riskLevel;
+        existing.contributingFactors = result.contributingFactors;
+        existing.suggestedAction = result.suggestedAction;
+        existing.aiExplanation = generateFallbackExplanation(
+          { name: existing.name, department: existing.department, year: existing.year }, result
+        );
+
+        newDetails[sid] = existing;
+
+        const summaryIdx = newStudents.findIndex(s => s.studentId === sid);
+        if (summaryIdx !== -1) {
+          newStudents[summaryIdx] = {
+            ...newStudents[summaryIdx],
+            riskScore: existing.riskScore,
+            riskLevel: existing.riskLevel
+          };
+        }
+      });
+
+      setDetailsMap(newDetails);
+      setStudents(newStudents);
+
+      // Sync reverted data to server
+      const studentsArray = Object.values(newDetails);
+      fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(studentsArray)
+      }).catch(e => console.error('Student sync failed after revert', e));
+    }
+
+    // Delete the upload log from server and client
     const res = await fetch(`/api/history?uploadedAt=${encodeURIComponent(uploadedAt)}`, { method: 'DELETE' });
     if (res.ok) {
       setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));

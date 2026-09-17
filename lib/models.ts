@@ -14,7 +14,11 @@ const StudentSchema = new mongoose.Schema({
   // Detailed Data
   attendanceHistory: [{
     week: String,
-    percentage: Number
+    percentage: Number,
+    subjects: [{
+      subject: String,
+      percentage: Number
+    }]
   }],
   subjectAttendance: [{
     subject: String,

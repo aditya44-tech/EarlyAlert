@@ -70,21 +70,28 @@ test('attendance factor: <60% caps out at 30 points', () => {
   assert.equal(r.riskLevel, 'Low');
 });
 
-test('attendance factor: 60-74% base is 20, drops get +8', () => {
+test('attendance factor: 60-74% interpolated base, drops get +8', () => {
+  // 70% → lerp(30, 20, 10/15) ≈ 23.33
   const flat = computeRiskScore(makeStudent({ attendanceHistory: weeks([70, 70, 71, 70]) }));
-  assert.equal(flat.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points, 20);
+  const flatPts = flat.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  assert.ok(flatPts > 20 && flatPts < 25, `expected interpolated ~23.33, got ${flatPts}`);
 
+  // Same latest but with steep drop → flatPts + 8, capped at 30
   const steep = computeRiskScore(makeStudent({ attendanceHistory: weeks([80, 76, 73, 70]) }));
-  assert.equal(steep.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points, 28);
+  const steepPts = steep.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  assert.equal(steepPts, 30); // 23.33 + 8 = 31.33 → capped at 30
 });
 
-test('attendance factor: 75-84% base is 8, sharp decline gets +10', () => {
+test('attendance factor: 75-84% interpolated base, sharp decline gets +10', () => {
+  // 80% → lerp(20, 8, 5/10) = 14
   const flat = computeRiskScore(makeStudent({ attendanceHistory: weeks([80, 80, 81, 80]) }));
-  assert.equal(flat.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points, 8);
+  const flatPts = flat.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  assert.equal(flatPts, 14);
 
   // slope over [95, 90, 85, 80] is -5 (< -3), latest in 75-84 band
   const drop = computeRiskScore(makeStudent({ attendanceHistory: weeks([95, 90, 85, 80]) }));
-  assert.equal(drop.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points, 18);
+  const dropPts = drop.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  assert.equal(dropPts, 24); // 14 + 10 = 24
 });
 
 test('attendance factor: >=85% is zero unless the drop is large', () => {
@@ -180,12 +187,11 @@ test('maximum-risk student reaches exactly 100', () => {
 });
 
 test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
-  // 17 (3 backlogs) + 8 (att 75-84 flat) + 6 (fee 1-10) = 31
+  // 17 (3 backlogs) + 14 (att 80% interpolated) = 31
   const medium = computeRiskScore(makeStudent({
     attendanceHistory: weeks([80, 80, 80, 80]),
     backlogs: 3,
     backlogSubjects: ['a', 'b', 'c'],
-    feeOverdueDays: 5,
   }));
   assert.equal(medium.riskScore, 31);
   assert.equal(medium.riskLevel, 'Medium');
@@ -319,4 +325,76 @@ test('fallback explanation: multiple factors lists secondary signals', () => {
   assert.match(text, /grade decline/i);
   assert.match(text, /backlogs/i);
   assert.equal(result.riskLevel, 'High');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fix #1: Normalize term test name matching
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('term test name normalization: lowercase, trimmed, and mixed-case all match', () => {
+  // Exact match
+  const exact = computeRiskScore(makeStudent({ termTests: unitTests(30) }));
+  assert.equal(exact.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
+
+  // Lowercase
+  const lower = computeRiskScore(makeStudent({
+    termTests: [{ testName: 'unit test 1', score: 30, maxMarks: 100 }],
+  }));
+  assert.equal(lower.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
+
+  // Uppercase
+  const upper = computeRiskScore(makeStudent({
+    termTests: [{ testName: 'UNIT TEST 1', score: 30, maxMarks: 100 }],
+  }));
+  assert.equal(upper.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
+
+  // Leading/trailing whitespace
+  const padded = computeRiskScore(makeStudent({
+    termTests: [{ testName: '  Unit Test 1  ', score: 30, maxMarks: 100 }],
+  }));
+  assert.equal(padded.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fix #3: UT2 without UT1 scores against baseline tiers
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('UT2-only (no UT1) scores against baseline tiers instead of treating as stable', () => {
+  // UT2=30 → baseline tier 25 pts (same as UT1=30 would be)
+  const r = computeRiskScore(makeStudent({
+    termTests: [{ testName: 'Unit Test 2', score: 30, maxMarks: 100 }],
+  }));
+  assert.equal(r.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
+  assert.ok(r.contributingFactors.find(f => f.factor === 'Grade Decline')?.reason.includes('Baseline'));
+
+  // UT2=80 → 0 pts, no factor
+  const good = computeRiskScore(makeStudent({
+    termTests: [{ testName: 'Unit Test 2', score: 80, maxMarks: 100 }],
+  }));
+  assert.equal(good.contributingFactors.find(f => f.factor === 'Grade Decline'), undefined);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fix #4: Smooth attendance scoring at tier boundaries
+// ─────────────────────────────────────────────────────────────────────────────
+
+test('attendance scoring interpolates smoothly within bands (no hard cliff at boundaries)', () => {
+  // 60% → 30 pts (band floor), 74% → ~20.93 pts (interpolated within 60-74 band)
+  const at60 = computeRiskScore(makeStudent({ attendanceHistory: weeks([60, 60, 60, 60]) }));
+  const at74 = computeRiskScore(makeStudent({ attendanceHistory: weeks([74, 74, 74, 74]) }));
+  const at75 = computeRiskScore(makeStudent({ attendanceHistory: weeks([75, 75, 75, 75]) }));
+  const at84 = computeRiskScore(makeStudent({ attendanceHistory: weeks([84, 84, 84, 84]) }));
+  const at85 = computeRiskScore(makeStudent({ attendanceHistory: weeks([85, 85, 85, 85]) }));
+
+  const pts60 = at60.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  const pts74 = at74.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  const pts75 = at75.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  const pts84 = at84.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+  const pts85 = at85.contributingFactors.find(f => f.factor === 'Attendance Decline')?.points ?? 0;
+
+  // Scores should decrease smoothly as attendance improves
+  assert.ok(pts60 >= pts74, `60% (${pts60}) should >= 74% (${pts74})`);
+  assert.ok(pts74 > pts75, `74% (${pts74}) should > 75% (${pts75}) — interpolation, not cliff`);
+  assert.ok(pts75 >= pts84, `75% (${pts75}) should >= 84% (${pts84})`);
+  assert.ok(pts84 > pts85, `84% (${pts84}) should > 85% (${pts85})`);
 });

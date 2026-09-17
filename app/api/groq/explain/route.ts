@@ -119,19 +119,43 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
       return NextResponse.json({ error: 'Invalid mode. Use "explain" or "rationale".' }, { status: 400 });
     }
 
-    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    // Primary model (Preview, verified on Groq docs 2025-09)
+    const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
+    // Fallback to a Production-tier model if the primary fails
+    const FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+
+    let groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'qwen/qwen3.8-27b',
+        model: PRIMARY_MODEL,
         messages: [{ role: 'user', content: prompt }],
         max_tokens: mode === 'rationale' ? 80 : 220,
         temperature: 0.4,
       }),
     });
+
+    // If the primary model fails, retry with the production fallback
+    if (!groqResponse.ok) {
+      const errText = await groqResponse.text();
+      console.warn(`[Groq] Primary model "${PRIMARY_MODEL}" failed (${groqResponse.status}): ${errText}. Retrying with "${FALLBACK_MODEL}".`);
+      groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: FALLBACK_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: mode === 'rationale' ? 80 : 220,
+          temperature: 0.4,
+        }),
+      });
+    }
 
     if (!groqResponse.ok) {
       const errText = await groqResponse.text();
@@ -145,6 +169,7 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
 
     const data = await groqResponse.json();
     const text: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
+    const modelUsed: string = data?.model ?? PRIMARY_MODEL;
 
     if (!text) {
       return NextResponse.json({
@@ -153,7 +178,7 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
       }, { status: 200 });
     }
 
-    return NextResponse.json({ text, model: 'qwen/qwen3.8-27b', powered: true });
+    return NextResponse.json({ text, model: modelUsed, powered: true });
 
   } catch (error) {
     console.error('[API /groq/explain]', error);

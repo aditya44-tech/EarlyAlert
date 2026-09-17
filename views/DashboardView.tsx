@@ -115,7 +115,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setUploadMessage({ type: 'error', text: 'Please select a CSV file first.' });
       return;
     }
-    const requiresWeek = uploadType === 'WeeklyAttendance' || uploadType === 'SubjectAttendance';
+    const requiresWeek = uploadType === 'WeeklyAttendance';
     if (requiresWeek && !weekLabel.trim()) {
       setUploadMessage({ type: 'error', text: 'Please enter a Week label.' });
       return;
@@ -261,10 +261,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="flex flex-col gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h3 className="font-black text-[#0D0D0D] uppercase tracking-tight flex items-center gap-2">
-                    <UploadCloud className="w-5 h-5 text-[#D62828]" />
-                    Weekly Data Upload
-                  </h3>
                   <p className="text-sm font-bold text-neutral-600 mt-1">
                     Upload CSV with attendance and test scores to update risk profiles.
                   </p>
@@ -274,15 +270,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-wrap gap-2">
                       <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 self-center mr-1">Weekly</span>
-                      {(['WeeklyAttendance', 'SubjectAttendance'] as const).map(type => (
-                        <button
-                          key={type}
-                          onClick={() => { setUploadType(type); setUploadedFile(null); setUploadMessage(null); }}
-                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
-                        >
-                          {type === 'WeeklyAttendance' ? 'Overall Attendance' : 'Subject Attendance'}
-                        </button>
-                      ))}
+                      <button
+                        onClick={() => { setUploadType('WeeklyAttendance'); setUploadedFile(null); setUploadMessage(null); }}
+                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === 'WeeklyAttendance' ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
+                      >
+                        Attendance
+                      </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 self-center mr-1">Tests</span>
@@ -323,7 +316,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                   
                   <div className="flex items-center gap-3 w-full border-t-2 border-neutral-300 pt-3 mt-1">
-                  {(uploadType === 'WeeklyAttendance' || uploadType === 'SubjectAttendance') && (
+                  {(uploadType === 'WeeklyAttendance') && (
                     <input
                       type="text"
                       value={weekLabel}

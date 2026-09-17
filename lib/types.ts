@@ -29,11 +29,18 @@ export interface ContributingFactor {
   reason: string;
 }
 
-export interface AttendanceHistoryItem {
-  week: string;
+export interface SubjectAttendanceEntry {
+  subject: string;
   percentage: number;
 }
 
+export interface AttendanceHistoryItem {
+  week: string;
+  percentage: number;
+  subjects?: SubjectAttendanceEntry[];
+}
+
+// Legacy type kept for backward compatibility
 export interface SubjectAttendanceItem {
   subject: string;
   week: string;
@@ -138,7 +145,7 @@ export interface OutcomeComparisonData {
   checkpointDate: string;
 }
 
-export type UploadType = 'WeeklyAttendance' | 'SubjectAttendance' | 'UnitTest1' | 'UnitTest2' | 'Backlogs' | 'FeeStatus' | 'LastSemResult' | 'EndSemResult';
+export type UploadType = 'WeeklyAttendance' | 'UnitTest1' | 'UnitTest2' | 'Backlogs' | 'FeeStatus' | 'LastSemResult' | 'EndSemResult';
 
 export interface UploadLog {
   id?: string;
@@ -148,5 +155,6 @@ export interface UploadLog {
   studentsUpdated: number;
   uploadedBy: string;
   rawData?: any[];
+  snapshots?: Record<string, any> | null;
   fileName?: string;
 }

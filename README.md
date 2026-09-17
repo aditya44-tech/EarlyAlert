@@ -26,9 +26,6 @@ Built for **Hack2Ignite 2026**.
 
 ## 🎬 Demo Overview
 
-![Login Screen](public/screenshots/01-login.png)
-*Sentinel login — Mentor (username: `mentor`, password: `sentinel123`) or Student (any ID from S001–S050)*
-
 ### What you can do in the live demo:
 
 1. **Log in as a Mentor** → See the dashboard with 50 pre-seeded students, sorted by risk score
@@ -39,19 +36,6 @@ Built for **Hack2Ignite 2026**.
 6. **Log in as a Student** → Students see their own risk profile, active interventions, and suggested actions
 
 ### Key screens:
-
-![Mentor Dashboard](public/screenshots/02-dashboard.png)
-*Dashboard — 50 monitored students, 13 high-risk, stats cards, sortable table with filters*
-
-![Student Detail - Top](public/screenshots/03-student-detail-top.png)
-*Student Detail — Risk score (80/100), AI-generated narrative, recommended action*
-
-![Student Detail - Risk Factors](public/screenshots/04-student-detail-factors.png)
-*Risk Factors — Breakdown of all 5 contributing factors with impact points*
-
-![Student Detail - Charts](public/screenshots/05-student-detail-charts.png)
-*Attendance Trajectory & Term Test Scores — Visual trend charts with threshold lines*
-
 - **Dashboard** — Student list with risk badges, distribution chart, upload history
 - **Student Detail** — Full risk breakdown, attendance trend chart, grade comparison, AI narrative, intervention panel
 - **Outcome Comparison** — Before/after intervention risk scores with improvement indicators
@@ -463,20 +447,6 @@ Sentinel ships with **50 pre-seeded Computer Science students** (S001–S050) wi
 | API key resilience | Expired key → silent fallback | Automatic model fallback + clear logging |
 
 ---
-
-## 📸 Screenshots
-
-To add screenshots to the README:
-
-1. Run the dev server: `npm run dev`
-2. Open http://localhost:3000
-3. Take screenshots of these screens:
-   - **01-login.png** — Login page (mentor tab selected)
-   - **02-dashboard.png** — Main dashboard with student list
-   - **03-student-detail-top.png** — Student detail page (top section with name, risk score, AI explanation)
-   - **04-student-detail-factors.png** — Risk factors table (scroll down on student detail)
-   - **05-student-detail-charts.png** — Attendance trajectory and term test charts (bottom of student detail)
-4. Save them to `public/screenshots/`
 
 ---
 
