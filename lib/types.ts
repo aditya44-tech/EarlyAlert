@@ -34,9 +34,23 @@ export interface AttendanceHistoryItem {
   percentage: number;
 }
 
-export interface GradeHistoryItem {
-  test: string;
+export interface SubjectAttendanceItem {
+  subject: string;
+  week: string;
+  percentage: number;
+}
+
+export interface TermTestItem {
+  testName: string;
   score: number;
+  maxMarks: number;
+  date: string;
+}
+
+export interface SemesterResult {
+  score?: number;
+  maxMarks?: number;
+  status?: "Upcoming" | "Completed";
 }
 
 export interface StudentDetail {
@@ -50,7 +64,14 @@ export interface StudentDetail {
   activeIntervention?: StudentActiveIntervention | null;
   contributingFactors: ContributingFactor[];
   attendanceHistory: AttendanceHistoryItem[];
-  gradeHistory: GradeHistoryItem[];
+  subjectAttendance: SubjectAttendanceItem[];
+  termTests: TermTestItem[];
+  endSemResult: SemesterResult;
+  lastSemResult: SemesterResult;
+  backlogCount?: number;
+  backlogSubjects?: string[];
+  feeStatus?: string;
+  feeOverdueDays?: number;
   aiExplanation: string;
   suggestedAction: string;
 }
@@ -109,7 +130,7 @@ export interface OutcomeComparisonData {
   checkpointDate: string;
 }
 
-export type UploadType = 'overall' | 'fee' | 'backlog' | 'subject_wise';
+export type UploadType = 'WeeklyAttendance' | 'SubjectAttendance' | 'UnitTest1' | 'UnitTest2' | 'Backlogs' | 'FeeStatus';
 
 export interface UploadLog {
   id?: string;

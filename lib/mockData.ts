@@ -186,10 +186,20 @@ function buildStudentData() {
       week: WEEK_LABELS[i],
       percentage: w.att,
     }));
-    const gradeHistory = row.weeks.map((w, i) => ({
-      test: WEEK_LABELS[i],
-      score: w.score,
-    }));
+    
+    // For demo purposes, we will just use the first week's score as Unit Test 1
+    const termTests = [
+      { testName: 'Unit Test 1', score: row.weeks[0].score, maxMarks: 100, date: '2026-08-15' }
+    ];
+    
+    const subjectAttendance = [
+      { subject: 'DBMS', week: 'Week 4', percentage: Math.max(0, row.weeks[3].att - 5) },
+      { subject: 'Computer Network', week: 'Week 4', percentage: row.weeks[3].att },
+      { subject: 'Python Programming', week: 'Week 4', percentage: Math.min(100, row.weeks[3].att + 5) }
+    ];
+
+    const endSemResult = { status: "Upcoming" as const };
+    const lastSemResult = { score: 65 + (sid.charCodeAt(sid.length - 1) % 20), maxMarks: 100 };
 
     const raw: RawStudentData = {
       studentId: sid,
@@ -197,7 +207,8 @@ function buildStudentData() {
       department: row.department,
       year: row.year,
       attendanceHistory,
-      gradeHistory,
+      subjectAttendance,
+      termTests,
       backlogs: bl.count,
       backlogSubjects: bl.subjects,
       feeOverdueDays: overdueDays,
@@ -229,7 +240,14 @@ function buildStudentData() {
       riskLevel: result.riskLevel,
       contributingFactors: result.contributingFactors,
       attendanceHistory,
-      gradeHistory,
+      subjectAttendance,
+      termTests,
+      endSemResult,
+      lastSemResult,
+      backlogCount: bl.count,
+      backlogSubjects: bl.subjects,
+      feeOverdueDays: overdueDays,
+      feeStatus: overdueDays > 0 ? 'Overdue' : 'Paid',
       aiExplanation: explanation,
       suggestedAction: result.suggestedAction,
     };

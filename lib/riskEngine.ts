@@ -18,7 +18,8 @@ export interface RawStudentData {
   department: string;
   year: number;
   attendanceHistory: { week: string; percentage: number }[];
-  gradeHistory: { test: string; score: number }[];
+  subjectAttendance: { subject: string; percentage: number }[];
+  termTests: { testName: string; score: number; maxMarks: number }[];
   backlogs: number;
   backlogSubjects: string[];
   feeOverdueDays: number;
@@ -90,26 +91,54 @@ function scoreAttendance(history: { week: string; percentage: number }[]) {
   return { points: pts, reason };
 }
 
-function scoreGrades(history: { test: string; score: number }[]) {
-  const vals = history.slice(-4)
-    .map(h => h.score)
-    .filter(v => Number.isFinite(v) && v >= 0 && v <= 100); // ignore invalid entries
-  if (vals.length === 0) return { points: 0, reason: 'No grade data.' };
+function scoreTermTests(termTests: { testName: string; score: number; maxMarks: number }[]) {
+  if (!termTests || termTests.length === 0) return { points: 0, reason: 'No unit test data.' };
 
-  const latest = vals[vals.length - 1];
-  const gradeSlope = slope(vals);
-  const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+  const ut1 = termTests.find(t => t.testName === 'Unit Test 1');
+  const ut2 = termTests.find(t => t.testName === 'Unit Test 2');
+
+  if (!ut1 && !ut2) return { points: 0, reason: 'No unit test data.' };
 
   let pts = 0;
-  if (latest < 40) pts = 25;
-  else if (latest < 55) { pts = 18; if (gradeSlope < -2) pts = Math.min(25, pts + 5); }
-  else if (latest < 65) { pts = 12; if (gradeSlope < -2) pts = Math.min(25, pts + 8); }
-  else if (latest < 75) { pts = 5; if (gradeSlope < -3) pts = Math.min(25, pts + 8); }
-  else { if (gradeSlope < -5) pts = 10; else if (gradeSlope < -3) pts = 5; }
+  let reason = '';
 
-  pts = clamp(pts, 0, 25);
-  const trendLabel = gradeSlope < -1.5 ? 'declining' : gradeSlope > 1.5 ? 'improving' : 'stable';
-  return { points: pts, reason: `Latest score: ${latest}/100 (avg ${avg.toFixed(0)}, ${trendLabel} trend)` };
+  if (ut1 && !ut2) {
+    const score = ut1.score;
+    if (score < 40) pts = 25;
+    else if (score < 55) pts = 18;
+    else if (score < 65) pts = 12;
+    else if (score < 75) pts = 5;
+    reason = `Unit Test 1 score: ${score}% (Baseline)`;
+  } else if (ut2) {
+    const score2 = ut2.score;
+    const score1 = ut1 ? ut1.score : score2;
+    
+    // Evaluate UT2 directly
+    if (score2 < 40) pts = 25;
+    else if (score2 < 55) pts = 18;
+    else if (score2 < 65) pts = 12;
+    else if (score2 < 75) pts = 5;
+
+    // Apply recovery/decline signal
+    const diff = score2 - score1;
+    if (diff >= 15) {
+      pts = Math.max(0, pts - 15); // Strong recovery
+      reason = `Unit Test 2 score: ${score2}% (Significant improvement of +${diff}%)`;
+    } else if (diff >= 5) {
+      pts = Math.max(0, pts - 5);
+      reason = `Unit Test 2 score: ${score2}% (Improvement of +${diff}%)`;
+    } else if (diff < -15) {
+      pts = Math.min(25, pts + 10);
+      reason = `Unit Test 2 score: ${score2}% (Significant decline of ${diff}%)`;
+    } else if (diff < -5) {
+      pts = Math.min(25, pts + 5);
+      reason = `Unit Test 2 score: ${score2}% (Decline of ${diff}%)`;
+    } else {
+      reason = `Unit Test 2 score: ${score2}% (Stable)`;
+    }
+  }
+
+  return { points: clamp(pts, 0, 25), reason };
 }
 
 function scoreBacklogs(backlogs: number, subjects: string[]) {
@@ -148,9 +177,14 @@ function scoreEngagement(submissionRate: number) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Suggested action map (Phase 4 of spec)
 // ─────────────────────────────────────────────────────────────────────────────
-export function getSuggestedAction(dominantFactor: string): string {
+export function getSuggestedAction(dominantFactor: string, student: RawStudentData): string {
   switch (dominantFactor) {
-    case 'Grade Decline': return 'Extra Class / Tutoring';
+    case 'Grade Decline':
+      if (student.subjectAttendance && student.subjectAttendance.length > 0) {
+        const lowest = student.subjectAttendance.reduce((min, curr) => curr.percentage < min.percentage ? curr : min, student.subjectAttendance[0]);
+        return `Extra Class / Tutoring: ${lowest.subject}`;
+      }
+      return 'Extra Class / Tutoring';
     case 'Attendance Decline': return 'Counseling / Check-in';
     case 'Fee Overdue': return 'Financial Aid Referral';
     case 'Backlogs': return 'Academic Support';
@@ -164,7 +198,7 @@ export function getSuggestedAction(dominantFactor: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 export function computeRiskScore(student: RawStudentData): RiskResult {
   const attResult = scoreAttendance(student.attendanceHistory);
-  const gradeResult = scoreGrades(student.gradeHistory);
+  const gradeResult = scoreTermTests(student.termTests);
   const backlogResult = scoreBacklogs(student.backlogs, student.backlogSubjects);
   const feeResult = scoreFeeOverdue(student.feeOverdueDays);
   const engResult = scoreEngagement(student.submissionRate);
@@ -186,7 +220,7 @@ export function computeRiskScore(student: RawStudentData): RiskResult {
   factors.sort((a, b) => b.points - a.points);
 
   const dominantFactor = factors.length > 0 ? factors[0].factor : 'None';
-  const suggestedAction = getSuggestedAction(dominantFactor);
+  const suggestedAction = getSuggestedAction(dominantFactor, student);
 
   return { riskScore: total, riskLevel, contributingFactors: factors, dominantFactor, suggestedAction };
 }

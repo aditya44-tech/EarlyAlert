@@ -16,10 +16,30 @@ const StudentSchema = new mongoose.Schema({
     week: String,
     percentage: Number
   }],
-  gradeHistory: [{
-    test: String,
-    score: Number
+  subjectAttendance: [{
+    subject: String,
+    week: String,
+    percentage: Number
   }],
+  termTests: [{
+    testName: String,
+    score: Number,
+    maxMarks: Number,
+    date: String
+  }],
+  endSemResult: {
+    score: Number,
+    maxMarks: Number,
+    status: String
+  },
+  lastSemResult: {
+    score: Number,
+    maxMarks: Number
+  },
+  backlogCount: { type: Number },
+  backlogSubjects: [{ type: String }],
+  feeStatus: { type: String },
+  feeOverdueDays: { type: Number },
   contributingFactors: [{
     factor: String,
     points: Number,

@@ -25,7 +25,7 @@ interface DashboardViewProps {
   students: StudentSummary[];
   onSelectStudent: (studentId: string) => void;
   uploadHistory?: UploadLog[];
-  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
+  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
   onClearAllData?: () => void;
   onDeleteUpload?: (uploadedAt: string) => void;
 }
@@ -47,7 +47,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Upload UI State
   const [weekLabel, setWeekLabel] = useState<string>('Week 1');
-  const [uploadType, setUploadType] = useState<'overall' | 'fee' | 'backlog' | 'subject_wise'>('overall');
+  const [uploadType, setUploadType] = useState<import('@/lib/types').UploadType>('WeeklyAttendance');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isUploadMinimized, setIsUploadMinimized] = useState(true);
@@ -115,7 +115,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setUploadMessage({ type: 'error', text: 'Please select a CSV file first.' });
       return;
     }
-    const requiresWeek = uploadType === 'overall' || uploadType === 'subject_wise';
+    const requiresWeek = uploadType === 'WeeklyAttendance' || uploadType === 'SubjectAttendance';
     if (requiresWeek && !weekLabel.trim()) {
       setUploadMessage({ type: 'error', text: 'Please enter a Week label.' });
       return;
@@ -140,15 +140,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             setUploadMessage({ type: 'error', text: 'Invalid CSV format. Required column: studentId.' });
             return;
           }
-          if (uploadType === 'overall' && (!('attendance' in firstRow) || !('testScore' in firstRow))) {
-            setUploadMessage({ type: 'error', text: 'Invalid CSV format for Overall. Required columns: studentId, attendance, testScore.' });
+          if (uploadType === 'WeeklyAttendance' && (!('attendance' in firstRow))) {
+            setUploadMessage({ type: 'error', text: 'Invalid CSV format for Weekly Attendance. Required columns: studentId, attendance.' });
             return;
           }
-          if (uploadType === 'fee' && (!('feeStatus' in firstRow) || !('overdueDays' in firstRow))) {
+          if (uploadType === 'FeeStatus' && (!('feeStatus' in firstRow) || !('overdueDays' in firstRow))) {
             setUploadMessage({ type: 'error', text: 'Invalid CSV format for Fee. Required columns: studentId, feeStatus, overdueDays.' });
             return;
           }
-          if (uploadType === 'backlog' && !('backlogCount' in firstRow)) {
+          if (uploadType === 'Backlogs' && !('backlogCount' in firstRow)) {
             setUploadMessage({ type: 'error', text: 'Invalid CSV format for Backlog. Required columns: studentId, backlogCount.' });
             return;
           }
@@ -271,17 +271,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <select
-                    value={uploadType}
-                    onChange={(e) => setUploadType(e.target.value as any)}
-                    className="neo-input py-1.5 px-3 text-sm font-bold bg-white"
-                  >
-                    <option value="overall">Overall Data</option>
-                    <option value="fee">Fee Status</option>
-                    <option value="backlog">Backlogs</option>
-                    <option value="subject_wise">Subject-wise</option>
-                  </select>
-                  {(uploadType === 'overall' || uploadType === 'subject_wise') && (
+                  <div className="flex flex-wrap gap-2">
+                    {(['WeeklyAttendance', 'SubjectAttendance', 'UnitTest1', 'UnitTest2', 'Backlogs', 'FeeStatus'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setUploadType(type);
+                          setUploadedFile(null);
+                          setUploadMessage(null);
+                        }}
+                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
+                      >
+                        {type.replace(/([A-Z])/g, ' $1').trim()}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="flex items-center gap-3 w-full border-t-2 border-neutral-300 pt-3 mt-1">
+                  {(uploadType === 'WeeklyAttendance' || uploadType === 'SubjectAttendance') && (
                     <input
                       type="text"
                       value={weekLabel}
@@ -321,6 +328,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       )}
                     </button>
                   )}
+                </div>
                 </div>
               </div>
 

@@ -16,7 +16,7 @@ interface EarlyAlertContextType {
   setUploadHistory: React.Dispatch<React.SetStateAction<UploadLog[]>>;
   detailsMap: Record<string, StudentDetail>;
   fetchStudentDetail: (id: string) => Promise<StudentDetail | null>;
-  handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
+  handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
   handleClearAllData: () => void;
   handleDeleteUpload: (uploadedAt: string) => void;
   handleInterventionAssigned: (payload: MentorActionPayload) => Promise<void>;
@@ -88,7 +88,7 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
     return null;
   };
 
-  const handleDataUpload = (parsedData: any[], weekLabel: string, uploadType: 'overall' | 'fee' | 'backlog' | 'subject_wise', fileName?: string): { success: boolean; updatedCount: number; skippedCount: number } => {
+  const handleDataUpload = (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string): { success: boolean; updatedCount: number; skippedCount: number } => {
     const newDetails = { ...detailsMap };
     const newStudents = [...students];
     let updatedCount = 0;
@@ -102,7 +102,7 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
         const name = row.name?.trim() || sid;
         newDetails[sid] = {
           studentId: sid, name, department: row.department?.trim() || 'Computer Science', year: parseInt(row.year, 10) || 1,
-          riskScore: 0, riskLevel: 'Low', contributingFactors: [], attendanceHistory: [], gradeHistory: [], aiExplanation: '', suggestedAction: 'Monitor',
+          riskScore: 0, riskLevel: 'Low', contributingFactors: [], attendanceHistory: [], subjectAttendance: [], termTests: [], endSemResult: { status: 'Upcoming' }, lastSemResult: { score: 0, maxMarks: 0 }, aiExplanation: '', suggestedAction: 'Monitor',
         };
         if (!newStudents.find(s => s.studentId === sid)) {
           newStudents.push({ studentId: sid, name, department: newDetails[sid].department, year: newDetails[sid].year, riskScore: 0, riskLevel: 'Low', interventionStatus: 'None' });
@@ -111,37 +111,77 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
 
       const existing = { ...newDetails[sid] };
 
-      if (uploadType === 'overall') {
+      if (uploadType === 'WeeklyAttendance') {
         const att = parseFloat(row.attendance);
-        const score = parseFloat(row.testScore);
-        if (!isNaN(att) && !isNaN(score)) {
+        if (!isNaN(att)) {
           existing.attendanceHistory = [...existing.attendanceHistory, { week: weekLabel, percentage: att }];
-          existing.gradeHistory = [...existing.gradeHistory, { test: weekLabel, score }];
-        }
-      } else if (uploadType === 'fee') {
-        const overdue = parseInt(row.overdueDays || '0', 10);
-        if (!isNaN(overdue)) {
-          existing.contributingFactors = existing.contributingFactors.filter(f => f.factor !== 'Fee Overdue');
           const raw: RawStudentData = {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
-            attendanceHistory: existing.attendanceHistory, gradeHistory: existing.gradeHistory,
-            backlogs: existing.contributingFactors.find(f => f.factor === 'Backlogs')?.points ? Math.round((existing.contributingFactors.find(f => f.factor === 'Backlogs')?.points ?? 0) / 6.5) : 0,
-            backlogSubjects: [], feeOverdueDays: overdue,
+            attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
+            backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: existing.feeOverdueDays || 0,
             submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
           };
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
           existing.aiExplanation = generateFallbackExplanation({ name: existing.name, department: existing.department, year: existing.year }, result);
         }
-      } else if (uploadType === 'backlog') {
-        const count = parseInt(row.backlogCount || '0', 10);
-        if (!isNaN(count)) {
-          existing.contributingFactors = existing.contributingFactors.filter(f => f.factor !== 'Backlogs');
+      } else if (uploadType === 'SubjectAttendance') {
+        const subs = Object.keys(row).filter(k => k.endsWith('_attendance'));
+        const newSubjects = subs.map(k => ({
+          subject: k.replace('_attendance', '').trim(),
+          week: weekLabel,
+          percentage: parseFloat(row[k])
+        })).filter(s => !isNaN(s.percentage));
+        
+        if (newSubjects.length > 0) {
+          existing.subjectAttendance = newSubjects;
+        }
+      } else if (uploadType === 'UnitTest1' || uploadType === 'UnitTest2') {
+        const score = parseFloat(row.score);
+        const maxMarks = parseFloat(row.maxMarks) || 100;
+        const date = row.date || new Date().toISOString().split('T')[0];
+        
+        if (!isNaN(score)) {
+          const testName = uploadType === 'UnitTest1' ? 'Unit Test 1' : 'Unit Test 2';
+          const filteredTests = existing.termTests.filter(t => t.testName !== testName);
+          existing.termTests = [...filteredTests, { testName, score, maxMarks, date }];
+          
           const raw: RawStudentData = {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
-            attendanceHistory: existing.attendanceHistory, gradeHistory: existing.gradeHistory,
-            backlogs: count, backlogSubjects: [], feeOverdueDays: existing.contributingFactors.find(f => f.factor === 'Fee Overdue') ? 45 : 0,
-            submissionRate: 70,
+            attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
+            backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: existing.feeOverdueDays || 0,
+            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+          };
+          const result = computeRiskScore(raw);
+          existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
+          existing.aiExplanation = generateFallbackExplanation({ name: existing.name, department: existing.department, year: existing.year }, result);
+        }
+      } else if (uploadType === 'FeeStatus') {
+        const overdue = parseInt(row.overdueDays || '0', 10);
+        if (!isNaN(overdue)) {
+          existing.feeOverdueDays = overdue;
+          existing.feeStatus = row.feeStatus;
+          const raw: RawStudentData = {
+            studentId: sid, name: existing.name, department: existing.department, year: existing.year,
+            attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
+            backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: overdue,
+            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+          };
+          const result = computeRiskScore(raw);
+          existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
+          existing.aiExplanation = generateFallbackExplanation({ name: existing.name, department: existing.department, year: existing.year }, result);
+        }
+      } else if (uploadType === 'Backlogs') {
+        const count = parseInt(row.backlogCount || '0', 10);
+        const subjects = row.backlogSubjects ? row.backlogSubjects.split(',').map((s: string) => s.trim()) : [];
+        if (!isNaN(count)) {
+          existing.backlogCount = count;
+          existing.backlogSubjects = subjects;
+          const raw: RawStudentData = {
+            studentId: sid, name: existing.name, department: existing.department, year: existing.year,
+            attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
+            backlogs: count, backlogSubjects: subjects, feeOverdueDays: existing.feeOverdueDays || 0,
+            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
           };
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;

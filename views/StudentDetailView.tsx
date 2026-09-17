@@ -122,6 +122,16 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               <span className="text-xs font-mono font-bold bg-neutral-100 border border-[#0D0D0D] px-2 py-0.5">
                 Year {student.year}
               </span>
+              {student.lastSemResult && (
+                <span className="text-xs font-mono font-bold bg-[#F4C430] border border-[#0D0D0D] px-2 py-0.5" title="Last Semester Result">
+                  Last Sem: {student.lastSemResult.score}%
+                </span>
+              )}
+              {student.endSemResult && (
+                <span className="text-xs font-mono font-bold bg-neutral-200 border border-[#0D0D0D] px-2 py-0.5" title="Current Semester Result">
+                  This Sem: {student.endSemResult.status === 'Completed' ? `${student.endSemResult.score}%` : student.endSemResult.status}
+                </span>
+              )}
             </div>
             <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-[#0D0D0D] tracking-tight">
               {student.name}
@@ -290,31 +300,31 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
           />
         </div>
 
-        {/* Grade Trend Chart */}
+        {/* Term Test Trend Chart */}
         <div className="neo-card p-5 bg-white">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <GraduationCap className="w-4 h-4 text-[#0D0D0D]" />
               <h3 className="font-black text-sm uppercase tracking-wider text-[#0D0D0D]">
-                Recent Assessment Scores
+                Term Test Scores
               </h3>
             </div>
             <span className="text-xs font-mono font-bold px-1.5 py-0.5 bg-neutral-100 text-[#0D0D0D] border border-[#0D0D0D]">
-              {student.gradeHistory.length} Assessments
+              {student.termTests?.length || 0} Assessments
             </span>
           </div>
           <p className="text-xs text-neutral-600 mb-4 font-medium">
-            Continuous internal assessment and quiz score milestones.
+            Continuous internal assessment test scores.
           </p>
           <TrendChart
-            data={student.gradeHistory as unknown as Record<string, unknown>[]}
-            xKey="test"
+            data={(student.termTests || []) as unknown as Record<string, unknown>[]}
+            xKey="testName"
             yKey="score"
             unit=" pts"
             lineColor="#0D0D0D"
             targetThreshold={70}
             thresholdLabel="Passing Threshold (70)"
-            yDomain={[30, 100]}
+            yDomain={[0, 100]}
           />
         </div>
       </div>
