@@ -52,12 +52,12 @@ const StudentSchema = new mongoose.Schema({
   suggestedAction: { type: String },
   aiExplanation: { type: String },
 
-  // Currently Active Intervention (nested inside student for easy querying)
   activeIntervention: {
     type: { type: String },
     details: { type: mongoose.Schema.Types.Mixed },
     status: { type: String, enum: ['Active', 'Resolved', 'Discontinued'] },
-    assignedDate: { type: String }
+    assignedDate: { type: String },
+    baselineRiskScore: { type: Number }
   }
 }, { timestamps: true });
 

@@ -168,7 +168,7 @@ export function getOutcome(studentId: string): OutcomeComparisonData | null {
     const detail = detailsStore[studentId];
     if (!statusEntry?.activeIntervention || !detail) return null;
 
-    const baselineScore = detail.riskScore; // best approximation
+    const baselineScore = statusEntry.activeIntervention.baselineRiskScore ?? detail.riskScore; // use stored baseline, or current score as last resort
     stored = {
       studentId,
       name: detail.name,

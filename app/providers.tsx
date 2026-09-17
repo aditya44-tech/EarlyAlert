@@ -421,11 +421,14 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const baselineRiskScore = detailsMap[payload.studentId]?.riskScore || 0;
+
     const activeIntervention = {
       type: payload.type,
       details: payload.details,
       status: status,
       assignedDate: payload.startDate,
+      baselineRiskScore,
     };
 
     // Update local client state immediately

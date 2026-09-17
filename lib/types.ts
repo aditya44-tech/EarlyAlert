@@ -117,6 +117,7 @@ export interface StudentActiveIntervention {
   };
   status: string;
   assignedDate: string;
+  baselineRiskScore?: number;
 }
 
 export interface StudentStatusData {
