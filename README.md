@@ -24,6 +24,7 @@ Built for **Hack2Ignite 2026**.
 - [Testing](#-testing)
 - [Demo Data](#-demo-data)
 - [Architecture Decisions](#️-architecture-decisions)
+- [AI Usage Disclosure](#-ai-usage-disclosure)
 
 ---
 
@@ -512,6 +513,16 @@ Sentinel ships with **50 pre-seeded Computer Science students** (S001–S050) wi
 | Subject attendance | Separate subject-wise CSVs were redundant | Single `*_overall.csv` with `*_attendance` columns |
 | Week label mismatch | UI week box could differ from CSV data | Parser now reads `week` column directly from CSV row |
 | Hydration warning | Bitdefender extension injected `bis_skin_checked` | `suppressHydrationWarning` on `<html>` and `<body>` |
+
+## 🤖 AI Usage Disclosure
+
+This project used the following AI tools during development:
+
+- **Google AI Studio** — for UI/UX design
+- **Antigravity** (Gemini 3.1, Claude Sonnet 4.6) — for core logic implementation and development
+- **Freebuff** (Mimo 2.5) — for testing
+
+Architecture decisions, the risk-scoring engine's logic, and overall feature design were made by the team; AI tools were used to assist implementation, not to generate the solution's core ideas.
 
 ---
 
