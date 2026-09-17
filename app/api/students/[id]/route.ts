@@ -3,6 +3,8 @@ import dbConnect, { isDbConnected } from '@/lib/dbConnect';
 import { Student } from '@/lib/models';
 import { getStudentDetail, updateStudentRisk, upsertStudent } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

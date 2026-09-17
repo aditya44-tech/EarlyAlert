@@ -3,6 +3,8 @@ import dbConnect, { isDbConnected } from '@/lib/dbConnect';
 import { UploadHistory } from '@/lib/models';
 import { getUploadHistory, addUploadHistory, deleteUploadHistory } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     if (await isDbConnected()) {
@@ -29,10 +31,12 @@ export async function POST(req: Request) {
 
     if (await isDbConnected()) {
       try {
+        console.log('[API History] Attempting to create record in MongoDB...');
         const newRecord = await UploadHistory.create(data);
+        console.log('[API History] Successfully created record with ID:', newRecord._id);
         return NextResponse.json({ success: true, record: newRecord });
       } catch (err: any) {
-        console.warn("MongoDB history create failed:", err.message);
+        console.error("[API History] MongoDB history create failed:", err.message, err);
       }
     }
 
