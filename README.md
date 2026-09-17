@@ -2,7 +2,7 @@
 
 > **Identifying at-risk students before they drop out — using deterministic scoring + AI-powered narratives.**
 
-Sentinel is a full-stack web application that helps college mentors detect, understand, and intervene with students at risk of dropping out. It analyzes attendance, grades, backlogs, fee status, and engagement to produce a 0–100 risk score, generates human-readable AI explanations, and tracks intervention outcomes over time.
+Sentinel is a full-stack web application that helps college mentors detect, understand, and intervene with students at risk of dropping out. It analyzes attendance (overall + subject-wise), grades, backlogs, fee status, and engagement to produce a 0–100 risk score, generates human-readable AI explanations, and tracks intervention outcomes over time.
 
 Built for **Hack2Ignite 2026**.
 
@@ -15,12 +15,15 @@ Built for **Hack2Ignite 2026**.
 - [Key Features](#-key-features)
 - [How It Works](#-how-it-works)
 - [Risk Engine Deep Dive](#-risk-engine-deep-dive)
-- [Tech Stack](#-tech-stack)
+- [How the AI Works](#-how-the-ai-works)
+- [Tech Stack](#️-tech-stack)
 - [Getting Started](#-getting-started)
+- [CSV Upload Format](#-csv-upload-format)
 - [Project Structure](#-project-structure)
 - [API Reference](#-api-reference)
 - [Testing](#-testing)
 - [Demo Data](#-demo-data)
+- [Architecture Decisions](#️-architecture-decisions)
 
 ---
 
@@ -62,6 +65,7 @@ Examples for student login:
 | Feature | Description |
 |---------|-------------|
 | **Deterministic Risk Engine** | Pure TypeScript rule engine — no ML, no randomness. Every score is auditable and explainable. |
+| **Subject-wise Attendance** | New CSV format includes per-subject attendance (`DBMS_attendance`, `DS_attendance`, etc.) merged alongside overall attendance. |
 | **AI-Powered Narratives** | Groq AI translates raw numbers into empathetic, human-readable explanations for mentors. |
 | **Dual-Risk Explanation** | AI narrative when available, deterministic fallback text when not — the UI never breaks. |
 | **Real-Time Recomputation** | Upload a CSV → risk scores recalculate instantly across the entire student body. |
@@ -150,6 +154,8 @@ Trend detection uses linear regression (slope) over 4 data points:
 - Slope > 2 → "improving trend"
 - Slope ≈ 0 → "stable"
 
+All interpolated values are **rounded to integers** before display.
+
 #### 2. Grades (0–25 points)
 Scores Unit Test 1 and Unit Test 2 with name normalization (case-insensitive, whitespace-trimmed):
 
@@ -194,7 +200,7 @@ When both UT1 and UT2 exist, the engine calculates the **delta** (improvement or
 ### Aggregation
 
 ```
-Total = clamp(attendance + grade + backlog + fee + engagement, 0, 100)
+Total = Math.round(clamp(attendance + grade + backlog + fee + engagement, 0, 100))
 
 Risk Level:
   0–30   → Low     (green badge)
@@ -226,6 +232,8 @@ Sentinel uses AI **exclusively as a translation layer, never for scoring.**
 3. Groq generates a readable narrative: *"This student is at high risk due to a sharp attendance decline over the last 3 weeks, compounded by 3 active backlogs in DBMS, Computer Network, and Python Programming."*
 4. If the Groq API fails, is rate-limited, or no API key is configured, the system automatically falls back to locally generated, rule-based text — **the UI never breaks during a demo**
 
+> **Important:** The AI narrative is generated **only on explicit refresh**, not on every page visit. This prevents unnecessary API calls and quota exhaustion.
+
 ### Two AI Modes
 
 | Mode | Purpose | Output |
@@ -239,7 +247,7 @@ Sentinel uses AI **exclusively as a translation layer, never for scoring.**
 
 | Layer | Technology |
 |-------|------------|
-| **Framework** | Next.js 15 (App Router) |
+| **Framework** | Next.js 15 (App Router, Turbopack) |
 | **Language** | TypeScript (strict mode) |
 | **UI** | React 19, Tailwind CSS v4 |
 | **Icons** | Lucide React |
@@ -260,13 +268,11 @@ Sentinel uses AI **exclusively as a translation layer, never for scoring.**
 
 ### 1. Install Dependencies
 
-
 ```bash
 npm install
 ```
 
 ### 2. Configure Environment
-
 
 Create `.env.local` in the project root:
 
@@ -301,6 +307,38 @@ Expected output: `31 passing, 0 failing`
 
 ---
 
+## 📂 CSV Upload Format
+
+The Weekly Attendance CSV uses a unified "overall" format that includes both overall and subject-wise attendance in a single file:
+
+```csv
+studentId,name,department,year,attendance,week,DBMS_attendance,DS_attendance,Computational Math_attendance,Computer Network_attendance,Python Programming_attendance
+S001,Suresh Nair,Computer Science,4,64,Week 1,56,75,57,70,64
+S002,Nidhi Pillai,Computer Science,2,50,Week 1,46,60,52,49,41
+```
+
+| Column | Description |
+|--------|-------------|
+| `studentId` | Unique student ID (e.g. `S001`) |
+| `name` | Full student name |
+| `department` | Department name |
+| `year` | Academic year (1–4) |
+| `attendance` | Overall attendance % for the week |
+| `week` | Week label (e.g. `Week 1`) — **read directly from CSV, not the UI input** |
+| `*_attendance` | Per-subject attendance % (any number of columns, named `SubjectName_attendance`) |
+
+> The parser automatically detects all `*_attendance` columns and stores them per-week. Subject names are extracted by stripping the `_attendance` suffix.
+
+### Other CSV Formats
+
+| Upload Type | Required Columns |
+|-------------|-----------------|
+| Unit Test 1 / 2 | `studentId, score, maxMarks, date` |
+| Backlogs | `studentId, backlogCount, backlogSubjects` |
+| Fee Status | `studentId, feeStatus, overdueDays` |
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -310,6 +348,9 @@ sentinel/
 │   ├── page.tsx                      # Login page → redirects to dashboard/student
 │   ├── providers.tsx                 # Global state (SentinelProvider context)
 │   ├── globals.css                   # Tailwind + custom styles
+│   ├── error.tsx                     # Route-level error boundary
+│   ├── not-found.tsx                 # 404 page
+│   ├── global-error.tsx              # Root layout error boundary
 │   │
 │   ├── dashboard/                    # Mentor views
 │   │   ├── page.tsx                  # Dashboard: student list, charts, uploads
@@ -327,12 +368,19 @@ sentinel/
 │       └── outcomes/                 # Outcome comparison data
 │
 ├── components/                       # Reusable UI components
-│   └── Header.tsx                    # Top navigation bar
+│   ├── Header.tsx                    # Top navigation bar
+│   ├── TrendChart.tsx                # Attendance trajectory chart (Recharts)
+│   ├── AttendanceChart.tsx           # Subject-wise attendance chart
+│   ├── StudentTableRow.tsx           # Dashboard table row
+│   ├── StudentCard.tsx               # Mobile dashboard card
+│   ├── RiskBadge.tsx                 # Risk level badge (Low/Medium/High)
+│   └── InterventionStatusBadge.tsx   # Intervention status badge
 │
 ├── views/                            # Major application screens
 │   ├── LoginView.tsx                 # Login screen (mentor/student selection)
 │   ├── DashboardView.tsx             # Main dashboard with charts
 │   ├── StudentDetailView.tsx         # Full student profile + risk breakdown
+│   ├── MentorActionPanel.tsx         # Intervention assignment panel
 │   └── OutcomeComparisonView.tsx     # Before/after intervention comparison
 │
 ├── lib/                              # Core logic & utilities
@@ -340,16 +388,28 @@ sentinel/
 │   ├── types.ts                      # Shared TypeScript interfaces
 │   ├── db.ts                         # In-memory data store
 │   ├── dbConnect.ts                  # MongoDB connection (optional)
-│   ├── models.ts                     # Mongoose schemas
+│   ├── models.ts                     # Mongoose schemas (incl. subject attendance)
 │   └── mockData.ts                   # 50 pre-seeded CS students
 │
 ├── tests/                            # Test suite (31 tests)
-│   ├── riskEngine.test.ts            # 28 engine unit tests
+│   ├── riskEngine.test.ts            # 25 engine unit tests
 │   ├── groq.test.ts                  # 6 AI integration tests
-│   ├── ts-register.mjs              # TypeScript test bootstrap
-│   └── ts-resolve-hooks.mjs         # Module resolution hook
+│   ├── ts-register.mjs               # TypeScript test bootstrap
+│   └── ts-resolve-hooks.mjs          # Module resolution hook
 │
-└── data/                             # Raw CSV files (attendance, grades, etc.)
+├── data/                             # Raw CSV files
+│   ├── CS_Week1_overall.csv          # Week 1: overall + subject attendance
+│   ├── CS_Week2_overall.csv          # Week 2: overall + subject attendance
+│   ├── CS_Week3_overall.csv          # Week 3: overall + subject attendance
+│   ├── CS_Week4_overall.csv          # Week 4: overall + subject attendance
+│   ├── CS_UnitTest1.csv              # Unit Test 1 scores
+│   ├── CS_UnitTest2.csv              # Unit Test 2 scores
+│   ├── CS_Backlogs.csv               # Backlog counts and subjects
+│   ├── CS_FeeStatus.csv              # Fee status and overdue days
+│   ├── CS_EndSem.csv                 # End semester results
+│   └── CS_LastSemResult.csv          # Last semester results
+│
+└── next.config.ts                    # Next.js config (Turbopack, standalone output)
 ```
 
 ---
@@ -378,7 +438,7 @@ sentinel/
 
 The project includes **31 automated tests** using Node.js built-in test runner:
 
-### Risk Engine Tests (28 tests)
+### Risk Engine Tests (25 tests)
 - Baseline healthy student scoring
 - All 5 factor scoring tiers (attendance, grades, backlogs, fees, engagement)
 - Grade delta calculation (UT2 improvement/decline vs UT1)
@@ -386,7 +446,8 @@ The project includes **31 automated tests** using Node.js built-in test runner:
 - Factor ranking and tie-breaking
 - Edge cases: empty data, negative inputs, invalid values
 - Term test name normalization (case-insensitive, whitespace-trimmed)
-- Smooth interpolation at tier boundaries
+- Smooth interpolation at tier boundaries (no hard cliffs)
+- UT2-only scoring against baseline tiers
 
 ### Groq Integration Tests (6 tests)
 - Prompt construction accuracy
@@ -433,6 +494,8 @@ Sentinel ships with **50 pre-seeded Computer Science students** (S001–S050) wi
 | **Client-side CSV parsing** | No server upload needed, instant feedback |
 | **Fire-and-forget server sync** | UI updates immediately, background persistence |
 | **Dual-risk explanation** | AI narrative when available, deterministic fallback when not |
+| **Turbopack dev server** | Faster HMR, no Webpack worker crashes |
+| **Week label from CSV** | Parser reads `week` column directly from CSV — no user-input mismatch possible |
 
 ---
 
@@ -443,10 +506,12 @@ Sentinel ships with **50 pre-seeded Computer Science students** (S001–S050) wi
 | Name normalization | `"unit test 1"` vs `"Unit Test 1"` missed matches | Trim + lowercase before comparison |
 | UT2-without-UT1 | Low UT2 scored as "stable" (0 pts) | UT2-only now scores against baseline tiers |
 | Smooth interpolation | Hard cliffs at 60%/75%/85% boundaries | Linear interpolation within each band |
+| Integer scores | Floating-point risk scores leaked into UI | `Math.round()` applied to all interpolated values |
 | Input validation | Negative scores / >100% inflated risk | All scorers filter invalid values |
 | API key resilience | Expired key → silent fallback | Automatic model fallback + clear logging |
-
----
+| Subject attendance | Separate subject-wise CSVs were redundant | Single `*_overall.csv` with `*_attendance` columns |
+| Week label mismatch | UI week box could differ from CSV data | Parser now reads `week` column directly from CSV row |
+| Hydration warning | Bitdefender extension injected `bis_skin_checked` | `suppressHydrationWarning` on `<html>` and `<body>` |
 
 ---
 
