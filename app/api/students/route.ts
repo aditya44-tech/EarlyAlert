@@ -3,8 +3,6 @@ import dbConnect, { isDbConnected } from '@/lib/dbConnect';
 import { Student } from '@/lib/models';
 import { getAllStudents, bulkUpsertStudents, clearAllStudents } from '@/lib/db';
 
-export const dynamic = 'force-dynamic';
-
 export async function GET() {
   try {
     if (await isDbConnected()) {
