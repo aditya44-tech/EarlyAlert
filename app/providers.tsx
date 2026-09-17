@@ -277,6 +277,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       assignedDate: payload.startDate,
     };
 
+    // Update local client state immediately
     setStudents(prev => prev.map(s => s.studentId === payload.studentId ? { ...s, interventionStatus: status as import('@/lib/types').InterventionStatus } : s));
     setDetailsMap(prev => ({
       ...prev,
@@ -287,6 +288,15 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       }
     }));
 
+    // Register in server-side outcome store via POST /api/interventions
+    // This is what populates outcomeStore so the Outcome Comparison page works
+    await fetch('/api/interventions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    // Also update the student's activeIntervention field via PATCH
     await fetch(`/api/students/${payload.studentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

@@ -158,8 +158,32 @@ export function resolveIntervention(studentId: string): void {
 }
 
 export function getOutcome(studentId: string): OutcomeComparisonData | null {
-  const stored = outcomeStore[studentId];
-  if (!stored) return null;
+  let stored = outcomeStore[studentId];
+
+  // Fallback: synthesize from interventionStatusStore if no outcome record exists
+  // (handles students whose intervention was set via PATCH before the POST fix,
+  //  or pre-seeded via studentStatusMap without a matching outcomeComparisonsMap entry)
+  if (!stored) {
+    const statusEntry = interventionStatusStore[studentId];
+    const detail = detailsStore[studentId];
+    if (!statusEntry?.activeIntervention || !detail) return null;
+
+    const baselineScore = detail.riskScore; // best approximation
+    stored = {
+      studentId,
+      name: detail.name,
+      intervention: {
+        type: statusEntry.activeIntervention.type,
+        details: statusEntry.activeIntervention.details,
+        startDate: statusEntry.activeIntervention.assignedDate,
+      },
+      baselineScore,
+      currentScore: baselineScore,
+      scoreDelta: 0,
+      outcome: 'No Change',
+      checkpointDate: statusEntry.activeIntervention.assignedDate,
+    };
+  }
 
   // Recalculate current score live from the latest student data
   const studentDetail = detailsStore[studentId];
@@ -176,13 +200,10 @@ export function getOutcome(studentId: string): OutcomeComparisonData | null {
   let hasNewData = false;
 
   if (studentDetail) {
-    // Check weekly attendance for most recent week label
-    for (const entry of (studentDetail.attendanceHistory ?? [])) {
-      // week labels may be 'Week 3' style strings; use index order instead of date parse
+    if ((studentDetail.attendanceHistory ?? []).length > 0) {
       hasNewData = true;
       latestDataDate = 'latest-upload';
     }
-    // Check term test dates
     for (const test of (studentDetail.termTests ?? [])) {
       if (test.date && test.date > latestDataDate) {
         latestDataDate = test.date;

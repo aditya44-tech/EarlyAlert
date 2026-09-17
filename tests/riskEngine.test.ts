@@ -22,8 +22,8 @@ function weeks(values: number[]) {
   return values.map((percentage, i) => ({ week: `W${i + 1}`, percentage }));
 }
 
-function scores(values: number[]) {
-  return values.map((score, i) => ({ test: `T${i + 1}`, score }));
+function tests(scores: number[]) {
+  return scores.map((score, i) => ({ testName: `T${i + 1}`, score, maxMarks: 100 }));
 }
 
 /** Healthy baseline student: zero risk on every factor. */
@@ -34,7 +34,8 @@ function makeStudent(overrides: Partial<RawStudentData> = {}): RawStudentData {
     department: 'CSE',
     year: 2,
     attendanceHistory: weeks([92, 91, 93, 92]), // stable, >= 85
-    gradeHistory: scores([85, 88, 86, 87]),     // stable, >= 75
+    subjectAttendance: [],
+    termTests: tests([85, 88, 86, 87]),     // stable, >= 75
     backlogs: 0,
     backlogSubjects: [],
     feeOverdueDays: 0,
@@ -99,24 +100,24 @@ test('attendance factor: >=85% is zero unless the drop is large', () => {
 });
 
 test('grade factor: <40 scores max 25 points', () => {
-  const r = computeRiskScore(makeStudent({ gradeHistory: scores([45, 38, 30, 25]) }));
+  const r = computeRiskScore(makeStudent({ termTests: tests([45, 38, 30, 25]) }));
   assert.equal(r.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 25);
 });
 
 test('grade factor: tiered scoring 40-54 / 55-64 / 65-74', () => {
-  const mid = computeRiskScore(makeStudent({ gradeHistory: scores([60, 60, 60, 60]) }));
+  const mid = computeRiskScore(makeStudent({ termTests: tests([60, 60, 60, 60]) }));
   assert.equal(mid.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 12);
 
-  const low = computeRiskScore(makeStudent({ gradeHistory: scores([50, 50, 50, 50]) }));
+  const low = computeRiskScore(makeStudent({ termTests: tests([50, 50, 50, 50]) }));
   assert.equal(low.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 18);
 
-  const high = computeRiskScore(makeStudent({ gradeHistory: scores([70, 70, 70, 70]) }));
+  const high = computeRiskScore(makeStudent({ termTests: tests([70, 70, 70, 70]) }));
   assert.equal(high.contributingFactors.find(f => f.factor === 'Grade Decline')?.points, 5);
 });
 
 test('grade factor: declining trend adds points in the 55-64 band', () => {
-  const flat = computeRiskScore(makeStudent({ gradeHistory: scores([64, 63, 62, 62]) }));
-  const decline = computeRiskScore(makeStudent({ gradeHistory: scores(series(64, -3)) })); // 64,61,58,55 -> slope -3
+  const flat = computeRiskScore(makeStudent({ termTests: tests([64, 63, 62, 62]) }));
+  const decline = computeRiskScore(makeStudent({ termTests: tests(series(64, -3)) })); // 64,61,58,55 -> slope -3
   const flatPts = flat.contributingFactors.find(f => f.factor === 'Grade Decline')?.points ?? 0;
   const declinePts = decline.contributingFactors.find(f => f.factor === 'Grade Decline')?.points ?? 0;
   assert.ok(declinePts > flatPts, `expected decline (${declinePts}) > flat (${flatPts})`);
@@ -166,7 +167,7 @@ test('engagement factor: tiered submission-rate mapping', () => {
 test('maximum-risk student reaches exactly 100', () => {
   const r = computeRiskScore(makeStudent({
     attendanceHistory: weeks([50, 45, 40, 35]),
-    gradeHistory: scores([30, 25, 20, 15]),
+    termTests: tests([30, 25, 20, 15]),
     backlogs: 4,
     backlogSubjects: ['A', 'B', 'C', 'D'],
     feeOverdueDays: 60,
@@ -191,7 +192,7 @@ test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
   // 30 (att<60) + 18 (grade 40-54 flat) + 12 (fee 11-30) = 60
   const justUnder = computeRiskScore(makeStudent({
     attendanceHistory: weeks([55, 50, 48, 45]),
-    gradeHistory: scores([50, 50, 50, 50]),
+    termTests: tests([50, 50, 50, 50]),
     feeOverdueDays: 20,
   }));
   assert.equal(justUnder.riskScore, 60);
@@ -200,7 +201,7 @@ test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
   // 30 (att<60) + 25 (grade<40) + 6 (1 backlog) = 61
   const high = computeRiskScore(makeStudent({
     attendanceHistory: weeks([55, 50, 48, 45]),
-    gradeHistory: scores([35, 30, 28, 25]),
+    termTests: tests([35, 30, 28, 25]),
     backlogs: 1,
     backlogSubjects: ['OS'],
   }));
@@ -211,7 +212,7 @@ test('risk level boundaries: 30 Low, 31 Medium, 60 Medium, 61 High', () => {
 test('factors are sorted descending by points', () => {
   const r = computeRiskScore(makeStudent({
     attendanceHistory: weeks([50, 45, 40, 35]), // 30
-    gradeHistory: scores([50, 50, 50, 50]),     // 18
+    termTests: tests([50, 50, 50, 50]),     // 18
     backlogs: 2,                                 // 13
     feeOverdueDays: 20,                          // 12
     submissionRate: 50,                          // 7
@@ -224,7 +225,7 @@ test('factors are sorted descending by points', () => {
 test('dominant factor ties keep the earlier-inserted factor (grade before fee)', () => {
   // grade 55-64 flat = 12, fee 11-30 = 12; everything else zero.
   const r = computeRiskScore(makeStudent({
-    gradeHistory: scores([60, 60, 60, 60]),
+    termTests: tests([60, 60, 60, 60]),
     feeOverdueDays: 15,
   }));
   assert.equal(r.riskScore, 24);
@@ -232,16 +233,18 @@ test('dominant factor ties keep the earlier-inserted factor (grade before fee)',
 });
 
 test('empty history arrays contribute zero and are excluded from factors', () => {
-  const r = computeRiskScore(makeStudent({ attendanceHistory: [], gradeHistory: [] }));
+  const r = computeRiskScore(makeStudent({ attendanceHistory: [], termTests: [] }));
   assert.equal(r.riskScore, 0);
   assert.deepEqual(r.contributingFactors, []);
-});test('negative / out-of-range inputs are ignored, yielding zero points', () => {
+});
+
+test('negative / out-of-range inputs are ignored, yielding zero points', () => {
   const r = computeRiskScore(makeStudent({
     backlogs: -3,
     feeOverdueDays: -10,
     submissionRate: -50,
     attendanceHistory: weeks([100, 100, 100, 100]),
-    gradeHistory: scores([100, 100, 100, 100]),
+    termTests: tests([100, 100, 100, 100]),
   }));
   assert.equal(r.riskScore, 0);
   assert.deepEqual(r.contributingFactors, []);
@@ -249,7 +252,7 @@ test('empty history arrays contribute zero and are excluded from factors', () =>
   // Invalid entries mixed into otherwise-good histories are dropped, not scored
   const mixed = computeRiskScore(makeStudent({
     attendanceHistory: weeks([NaN, 90, 150, 88]),
-    gradeHistory: scores([-5, 85, 999, 87]),
+    termTests: tests([-5, 85, 999, 87]),
   }));
   assert.equal(mixed.riskScore, 0);
   assert.deepEqual(mixed.contributingFactors, []);
@@ -260,8 +263,9 @@ test('empty history arrays contribute zero and are excluded from factors', () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('suggested action map covers every factor and the default', () => {
+  const student = makeStudent();
   const map: [string, string][] = [
-    ['Grade Decline', 'Extra Class / Tutoring'],
+    ['Grade Decline', 'Extra Class / Tutoring: '],
     ['Attendance Decline', 'Counseling / Check-in'],
     ['Fee Overdue', 'Financial Aid Referral'],
     ['Backlogs', 'Academic Support'],
@@ -269,14 +273,16 @@ test('suggested action map covers every factor and the default', () => {
     ['Unknown', 'Monitor'],
   ];
   for (const [factor, expected] of map) {
-    assert.equal(getSuggestedAction(factor), expected, `factor=${factor}`);
+    const result = getSuggestedAction(factor, student);
+    assert.ok(result.startsWith(expected), `factor=${factor}, got ${result}`);
   }
 });
 
 test('dominant factor drives the suggested action', () => {
-  const r = computeRiskScore(makeStudent({ feeOverdueDays: 45 }));
+  const student = makeStudent({ feeOverdueDays: 45 });
+  const r = computeRiskScore(student);
   assert.equal(r.dominantFactor, 'Fee Overdue');
-  assert.equal(r.suggestedAction, 'Financial Aid Referral');
+  assert.equal(getSuggestedAction(r.dominantFactor, student), 'Financial Aid Referral');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,7 +308,7 @@ test('fallback explanation: single factor mentions score, factor and reason', ()
 test('fallback explanation: multiple factors lists secondary signals', () => {
   const result = computeRiskScore(makeStudent({
     attendanceHistory: weeks([50, 45, 40, 35]),
-    gradeHistory: scores([50, 50, 50, 50]),
+    termTests: tests([50, 50, 50, 50]),
     backlogs: 2,
     backlogSubjects: ['DBMS', 'OS'],
   }));
