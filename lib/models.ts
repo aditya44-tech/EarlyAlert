@@ -60,11 +60,14 @@ const StudentSchema = new mongoose.Schema({
 export const Student = mongoose.models.Student || mongoose.model('Student', StudentSchema);
 
 const UploadHistorySchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
-  date: { type: String, required: true },
-  fileName: { type: String, required: true },
-  recordsProcessed: { type: Number, required: true },
-  uploadType: { type: String, required: true }
+  id: { type: String },
+  week: { type: String, required: true },
+  type: { type: String, required: true },
+  uploadedAt: { type: String, required: true },
+  studentsUpdated: { type: Number, required: true },
+  uploadedBy: { type: String, required: true },
+  rawData: { type: mongoose.Schema.Types.Mixed },
+  fileName: { type: String }
 }, { timestamps: true });
 
 export const UploadHistory = mongoose.models.UploadHistory || mongoose.model('UploadHistory', UploadHistorySchema);
