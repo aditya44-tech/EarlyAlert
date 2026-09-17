@@ -71,6 +71,7 @@ const UploadHistorySchema = new mongoose.Schema({
   studentsUpdated: { type: Number, required: true },
   uploadedBy: { type: String, required: true },
   rawData: { type: mongoose.Schema.Types.Mixed },
+  snapshots: { type: mongoose.Schema.Types.Mixed },
   fileName: { type: String }
 }, { timestamps: true });
 

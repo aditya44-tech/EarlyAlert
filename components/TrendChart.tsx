@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -20,6 +20,8 @@ interface TrendChartProps {
   lineColor?: string;
   targetThreshold?: number;
   thresholdLabel?: string;
+  secondThreshold?: number;
+  secondThresholdLabel?: string;
   height?: number;
   yDomain?: [number, number];
 }
@@ -64,6 +66,8 @@ export const TrendChart: React.FC<TrendChartProps> = ({
   lineColor = '#D62828',
   targetThreshold,
   thresholdLabel,
+  secondThreshold,
+  secondThresholdLabel,
   height = 240,
   yDomain,
 }) => {
@@ -134,17 +138,36 @@ export const TrendChart: React.FC<TrendChartProps> = ({
             {targetThreshold !== undefined && (
               <ReferenceLine
                 y={targetThreshold}
-                stroke="#0D0D0D"
+                stroke="#2D9D5F"
                 strokeDasharray="4 4"
                 strokeWidth={2}
                 label={
                   thresholdLabel
                     ? {
                         value: thresholdLabel,
-                        fill: '#0D0D0D',
+                        fill: '#2D9D5F',
                         fontSize: 10,
                         fontWeight: 'bold',
                         position: 'insideBottomRight',
+                      }
+                    : undefined
+                }
+              />
+            )}
+            {secondThreshold !== undefined && (
+              <ReferenceLine
+                y={secondThreshold}
+                stroke="#D62828"
+                strokeDasharray="4 4"
+                strokeWidth={2}
+                label={
+                  secondThresholdLabel
+                    ? {
+                        value: secondThresholdLabel,
+                        fill: '#D62828',
+                        fontSize: 10,
+                        fontWeight: 'bold',
+                        position: 'insideTopRight',
                       }
                     : undefined
                 }

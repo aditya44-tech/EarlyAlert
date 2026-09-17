@@ -308,7 +308,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             unit="%"
             lineColor="#D62828"
             targetThreshold={75}
-            thresholdLabel="Min Required (75%)"
+            thresholdLabel="Min 75%"
             yDomain={[40, 100]}
           />
         </div>
@@ -336,7 +336,9 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             unit=" pts"
             lineColor="#0D0D0D"
             targetThreshold={70}
-            thresholdLabel="Passing Threshold (70)"
+            thresholdLabel="Target (70)"
+            secondThreshold={40}
+            secondThresholdLabel="Fail (<40)"
             yDomain={[0, 100]}
           />
         </div>
