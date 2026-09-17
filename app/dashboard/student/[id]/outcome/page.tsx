@@ -13,7 +13,7 @@ function buildOutcomeData(detail: StudentDetail): OutcomeComparisonData | null {
   const intervention = detail.activeIntervention;
 
   // Baseline: stored when intervention was assigned (if available), else current score
-  const baselineScore: number = (detail as any).baselineRiskScore ?? detail.riskScore;
+  const baselineScore: number = intervention.baselineRiskScore ?? detail.riskScore;
   const currentScore = detail.riskScore;
   const scoreDelta = currentScore - baselineScore;
 
