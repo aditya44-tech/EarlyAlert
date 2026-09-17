@@ -3,7 +3,7 @@
  */
 
 export type RiskLevel = 'Low' | 'Medium' | 'High';
-export type InterventionStatus = 'None' | 'Active' | 'Resolved';
+export type InterventionStatus = 'None' | 'Active' | 'Resolved' | 'Referred' | 'Notified';
 
 export type ActionType =
   | 'Extra Class'
@@ -80,6 +80,13 @@ export interface InterventionDetails {
   subject?: string;
   schedule?: string;
   instructor?: string;
+  counselingType?: string;
+  counselorName?: string;
+  referredDepartment?: string;
+  feeNotes?: string;
+  supportType?: string;
+  supportSubjects?: string[];
+  contactMethod?: string;
   [key: string]: unknown;
 }
 
@@ -90,6 +97,7 @@ export interface MentorActionPayload {
   notes: string;
   assignedBy: string;
   startDate: string;
+  status: string;
 }
 
 export interface StudentActiveIntervention {
@@ -130,7 +138,7 @@ export interface OutcomeComparisonData {
   checkpointDate: string;
 }
 
-export type UploadType = 'WeeklyAttendance' | 'SubjectAttendance' | 'UnitTest1' | 'UnitTest2' | 'Backlogs' | 'FeeStatus';
+export type UploadType = 'WeeklyAttendance' | 'SubjectAttendance' | 'UnitTest1' | 'UnitTest2' | 'Backlogs' | 'FeeStatus' | 'LastSemResult' | 'EndSemResult';
 
 export interface UploadLog {
   id?: string;

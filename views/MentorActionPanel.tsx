@@ -13,26 +13,23 @@ import {
 } from 'lucide-react';
 
 interface MentorActionPanelProps {
-  studentId: string;
-  studentName: string;
-  riskScore?: number;
-  suggestedAction?: string;
-  dominantFactor?: string;
+  student: import('@/lib/types').StudentDetail;
   onBack: () => void;
   onSubmitSuccess: (payload: MentorActionPayload) => void;
   onNavigateToOutcomeView?: (studentId: string) => void;
 }
 
 export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
-  studentId,
-  studentName,
-  riskScore = 0,
-  suggestedAction = 'Extra Class / Tutoring',
-  dominantFactor = 'Risk Factors',
+  student,
   onBack,
   onSubmitSuccess,
   onNavigateToOutcomeView,
 }) => {
+  const studentId = student.studentId;
+  const studentName = student.name;
+  const riskScore = student.riskScore;
+  const suggestedAction = student.suggestedAction || 'Monitor';
+  const dominantFactor = student.contributingFactors?.[0]?.factor || 'Risk Factors';
   // Determine initial action type from suggestedAction
   const getInitialActionType = (suggestion: string): ActionType => {
     if (suggestion.toLowerCase().includes('extra class') || suggestion.toLowerCase().includes('tutoring')) {
@@ -53,13 +50,43 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
     return 'Other';
   };
 
+  const availableSubjects = Array.from(new Set([
+    ...(student.subjectAttendance?.map(s => s.subject) || []),
+    ...(student.backlogSubjects?.flatMap(s => s.split(/[,;]/).map(str => str.trim()).filter(Boolean)) || []),
+    'Data Structures', 'DBMS', 'Computational Math', 'Computer Network', 'Python Programming'
+  ]));
+
+  // Recommend subject based on backlog (low grade) or lowest attendance
+  let recommendedSubject = availableSubjects[0];
+  let recommendationReason = '';
+  
+  if (student.backlogSubjects && student.backlogSubjects.length > 0) {
+    const parsedBacklogs = student.backlogSubjects.flatMap(s => s.split(/[,;]/).map(str => str.trim()).filter(Boolean));
+    if (parsedBacklogs.length > 0) {
+      recommendedSubject = parsedBacklogs[0];
+      recommendationReason = 'Low Grade';
+    }
+  } else if (student.subjectAttendance && student.subjectAttendance.length > 0) {
+    recommendedSubject = student.subjectAttendance.reduce((min, curr) => curr.percentage < min.percentage ? curr : min, student.subjectAttendance[0]).subject;
+    recommendationReason = 'Low Attendance';
+  }
+
+  const defaultFeeNotes = student.feeOverdueDays ? `Overdue by ${student.feeOverdueDays} days. Status: ${student.feeStatus}` : '';
+
   const [actionType, setActionType] = useState<ActionType>(getInitialActionType(suggestedAction));
-  const [subject, setSubject] = useState('Data Structures');
-  const [schedule, setSchedule] = useState('Tue/Thu 4pm');
+  const [subject, setSubject] = useState(recommendedSubject);
+  const [schedule, setSchedule] = useState('');
   const [instructor, setInstructor] = useState('');
+  const [counselingType, setCounselingType] = useState('Academic');
+  const [counselorName, setCounselorName] = useState('');
+  const [referredDepartment, setReferredDepartment] = useState('Accounts Office');
+  const [feeNotes, setFeeNotes] = useState(defaultFeeNotes);
+  const [supportType, setSupportType] = useState('Tutoring');
+  const [supportSubjects, setSupportSubjects] = useState(recommendedSubject);
+  const [contactMethod, setContactMethod] = useState('Email');
   const [notes, setNotes] = useState('');
   const [assignedBy] = useState('Mentor');
-  const [startDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [submittedPayload, setSubmittedPayload] = useState<MentorActionPayload | null>(null);
   const [groqRationale, setGroqRationale] = useState<string>('');
@@ -68,21 +95,40 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Construct the exact object specified by data contract
+    let details: any = {};
+    let status = 'Active';
+
+    switch (actionType) {
+      case 'Extra Class':
+        details = { subject: subject.trim(), schedule: schedule.trim(), instructor: instructor.trim() };
+        break;
+      case 'Counseling':
+        details = { counselingType, schedule: schedule.trim() || startDate, counselorName: counselorName.trim() || assignedBy };
+        break;
+      case 'Financial Aid Referral':
+        details = { referredDepartment: referredDepartment.trim(), feeNotes: feeNotes.trim() };
+        status = 'Referred';
+        break;
+      case 'Academic Support':
+        details = { supportType, supportSubjects: supportSubjects.split(',').map(s => s.trim()) };
+        break;
+      case 'Parent/Guardian Notified':
+        details = { contactMethod };
+        status = 'Notified';
+        break;
+      case 'Other':
+      default:
+        break;
+    }
+
     const payload: MentorActionPayload = {
       studentId,
       type: actionType,
-      details:
-        actionType === 'Extra Class'
-          ? {
-              subject: subject.trim(),
-              schedule: schedule.trim(),
-              instructor: instructor.trim(),
-            }
-          : {},
+      details,
       notes: notes.trim(),
       assignedBy,
       startDate,
+      status
     };
 
     console.log('[MentorActionPanel] Created intervention payload:', payload);
@@ -209,6 +255,11 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
               Automated Suggestion Context
             </span>
             <span className="font-black text-sm text-[#0D0D0D]">{suggestedAction}</span>
+            {student.contributingFactors?.length > 0 && (
+              <span className="font-bold text-[#D62828] block mt-0.5">
+                Suggested due to: {student.contributingFactors[0].reason}
+              </span>
+            )}
           </div>
         </div>
 
@@ -237,7 +288,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
             </select>
           </div>
 
-          {/* Conditional Fields: Only if Action Type is 'Extra Class' */}
+          {/* Conditional Fields */}
           {actionType === 'Extra Class' && (
             <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] space-y-4">
               <div className="flex items-center gap-2 pb-2 border-b-2 border-[#0D0D0D]">
@@ -246,60 +297,93 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
                   Extra Class Logistics
                 </span>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label
-                    htmlFor="subject-input"
-                    className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]"
-                  >
-                    Subject <span className="text-[#D62828]">*</span>
-                  </label>
-                  <input
-                    id="subject-input"
-                    type="text"
-                    required
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    placeholder="e.g. Data Structures"
-                    className="neo-input w-full p-2 text-sm"
-                  />
+                  <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Subject <span className="text-[#D62828]">*</span></label>
+                  <select required value={subject} onChange={(e) => setSubject(e.target.value)} className="neo-input w-full p-2 text-sm font-bold">
+                    {availableSubjects.map(s => (
+                      <option key={s} value={s}>
+                        {s} {s === recommendedSubject && recommendationReason ? `(Recommended - ${recommendationReason})` : s === recommendedSubject ? '(Recommended)' : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-
                 <div className="space-y-1">
-                  <label
-                    htmlFor="schedule-input"
-                    className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]"
-                  >
-                    Schedule <span className="text-[#D62828]">*</span>
-                  </label>
-                  <input
-                    id="schedule-input"
-                    type="text"
-                    required
-                    value={schedule}
-                    onChange={(e) => setSchedule(e.target.value)}
-                    placeholder="e.g. Tue/Thu 4pm"
-                    className="neo-input w-full p-2 text-sm"
-                  />
+                  <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Schedule <span className="text-[#D62828]">*</span></label>
+                  <input type="text" required value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="e.g. Tue/Thu 4pm" className="neo-input w-full p-2 text-sm" />
                 </div>
               </div>
-
               <div className="space-y-1">
-                <label
-                  htmlFor="instructor-input"
-                  className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]"
-                >
-                  Instructor (Optional)
-                </label>
-                <input
-                  id="instructor-input"
-                  type="text"
-                  value={instructor}
-                  onChange={(e) => setInstructor(e.target.value)}
-                  placeholder="e.g. Prof. Mehta"
-                  className="neo-input w-full p-2 text-sm"
-                />
+                <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Instructor (Optional)</label>
+                <input type="text" value={instructor} onChange={(e) => setInstructor(e.target.value)} placeholder="e.g. Prof. Mehta" className="neo-input w-full p-2 text-sm" />
+              </div>
+            </div>
+          )}
+
+          {actionType === 'Counseling' && (
+            <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Counseling Type <span className="text-[#D62828]">*</span></label>
+                  <select value={counselingType} onChange={(e) => setCounselingType(e.target.value)} className="neo-input w-full p-2 text-sm">
+                    <option value="Academic">Academic</option>
+                    <option value="Personal">Personal</option>
+                    <option value="Attendance-related">Attendance-related</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Scheduled Date/Time</label>
+                  <input type="datetime-local" value={schedule} onChange={(e) => setSchedule(e.target.value)} className="neo-input w-full p-2 text-sm" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Counselor Name (Optional)</label>
+                <input type="text" value={counselorName} onChange={(e) => setCounselorName(e.target.value)} placeholder={`Defaults to ${assignedBy}`} className="neo-input w-full p-2 text-sm" />
+              </div>
+            </div>
+          )}
+
+          {actionType === 'Financial Aid Referral' && (
+            <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] space-y-4">
+              <div className="space-y-1">
+                <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Referred Department <span className="text-[#D62828]">*</span></label>
+                <input type="text" required value={referredDepartment} onChange={(e) => setReferredDepartment(e.target.value)} placeholder="e.g. Accounts Office" className="neo-input w-full p-2 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Fee Notes</label>
+                <input type="text" value={feeNotes} onChange={(e) => setFeeNotes(e.target.value)} className="neo-input w-full p-2 text-sm" />
+              </div>
+            </div>
+          )}
+
+          {actionType === 'Academic Support' && (
+            <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Support Type <span className="text-[#D62828]">*</span></label>
+                  <select value={supportType} onChange={(e) => setSupportType(e.target.value)} className="neo-input w-full p-2 text-sm">
+                    <option value="Tutoring">Tutoring</option>
+                    <option value="Study Materials">Study Materials</option>
+                    <option value="Peer Mentoring">Peer Mentoring</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Subject(s) Needing Support</label>
+                  <input type="text" value={supportSubjects} onChange={(e) => setSupportSubjects(e.target.value)} placeholder="Comma separated subjects" className="neo-input w-full p-2 text-sm" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {actionType === 'Parent/Guardian Notified' && (
+            <div className="p-4 bg-[#F5F1E8] border-2 border-[#0D0D0D] space-y-4">
+              <div className="space-y-1">
+                <label className="block font-bold text-xs uppercase tracking-wider text-[#0D0D0D]">Contact Method <span className="text-[#D62828]">*</span></label>
+                <select value={contactMethod} onChange={(e) => setContactMethod(e.target.value)} className="neo-input w-full p-2 text-sm">
+                  <option value="Call">Call</option>
+                  <option value="Email">Email</option>
+                  <option value="In-person meeting">In-person meeting</option>
+                </select>
               </div>
             </div>
           )}
@@ -334,10 +418,12 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
               <span className="font-sans font-extrabold uppercase text-neutral-500 block text-[10px]">
                 Effective Start Date
               </span>
-              <span className="font-bold text-[#0D0D0D] flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {startDate}
-              </span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="neo-input bg-transparent border-none p-0 text-[#0D0D0D] font-bold outline-none"
+              />
             </div>
           </div>
 

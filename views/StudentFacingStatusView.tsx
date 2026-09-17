@@ -66,7 +66,7 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
       </div>
 
       {/* Main Student Status Card */}
-      {intervention ? (
+      {intervention && intervention.status !== 'Notified' ? (
         <div className="neo-card p-6 md:p-8 bg-white space-y-6">
           <div className="flex items-center justify-between border-b-2 border-[#0D0D0D] pb-4">
             <div>
@@ -75,7 +75,11 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
                 Active Academic Support Plan
               </span>
               <h1 className="text-xl md:text-2xl font-black text-[#0D0D0D] mt-1">
-                Scheduled Learning Session
+                {intervention.type === 'Extra Class' && 'Scheduled Extra Class'}
+                {intervention.type === 'Counseling' && 'Counseling Session Scheduled'}
+                {intervention.type === 'Financial Aid Referral' && 'Financial Aid Referral'}
+                {intervention.type === 'Academic Support' && 'Academic Support Plan'}
+                {intervention.type === 'Other' && 'Support Plan Assigned'}
               </h1>
             </div>
             <span className="px-3 py-1 bg-[#2563EB] text-white font-black text-xs uppercase tracking-wider border-2 border-[#0D0D0D] shadow-[2px_2px_0px_#0D0D0D]">
@@ -83,30 +87,85 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
             </span>
           </div>
 
-          {/* Simple, Friendly Main Announcement */}
+          {/* Type-specific announcement */}
           <div className="p-5 bg-[#FFFDEB] border-[3px] border-[#0D0D0D] shadow-[4px_4px_0px_#0D0D0D]">
             <div className="flex items-start gap-3">
               <div className="p-2 bg-[#0D0D0D] text-white shrink-0 mt-0.5">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h2 className="text-base md:text-lg font-black text-[#0D0D0D] leading-snug">
-                  You have an {intervention.type} scheduled:
-                </h2>
-                <div className="text-base font-extrabold text-[#D62828]">
-                  {intervention.details.subject || 'General Academic Coaching'}
-                  {intervention.details.schedule && `, ${intervention.details.schedule}`}
-                </div>
-                {intervention.details.instructor && (
-                  <p className="text-xs font-bold text-neutral-700">
-                    Instructor / Mentor: {String(intervention.details.instructor)}
-                  </p>
+                {intervention.type === 'Extra Class' && (
+                  <>
+                    <h2 className="text-base md:text-lg font-black text-[#0D0D0D] leading-snug">
+                      Extra Class assigned:
+                    </h2>
+                    <div className="text-base font-extrabold text-[#D62828]">
+                      {String(intervention.details.subject || 'General Subject')}
+                      {intervention.details.schedule ? `, ${String(intervention.details.schedule)}` : null}
+                    </div>
+                    {intervention.details.instructor ? (
+                      <p className="text-xs font-bold text-neutral-700">Instructor: {String(intervention.details.instructor)}</p>
+                    ) : null}
+                  </>
+                )}
+                {intervention.type === 'Counseling' && (
+                  <>
+                    <h2 className="text-base md:text-lg font-black text-[#0D0D0D] leading-snug">
+                      Counseling scheduled:
+                    </h2>
+                    <div className="text-base font-extrabold text-[#D62828]">
+                      {intervention.details.schedule
+                        ? new Date(String(intervention.details.schedule)).toLocaleString()
+                        : 'Date to be confirmed'}
+                      {intervention.details.counselorName ? ` with ${String(intervention.details.counselorName)}` : null}
+                    </div>
+                    {intervention.details.counselingType ? (
+                      <p className="text-xs font-bold text-neutral-700">Type: {String(intervention.details.counselingType)}</p>
+                    ) : null}
+                  </>
+                )}
+                {intervention.type === 'Financial Aid Referral' && (
+                  <>
+                    <h2 className="text-base md:text-lg font-black text-[#0D0D0D] leading-snug">
+                      Referred to Financial Aid:
+                    </h2>
+                    <div className="text-base font-extrabold text-[#D62828]">
+                      {String(intervention.details.referredDepartment || 'Financial Aid Office')}
+                    </div>
+                    {intervention.details.feeNotes ? (
+                      <p className="text-xs font-bold text-neutral-700">Note: {String(intervention.details.feeNotes)}</p>
+                    ) : null}
+                  </>
+                )}
+                {intervention.type === 'Academic Support' && (
+                  <>
+                    <h2 className="text-base md:text-lg font-black text-[#0D0D0D] leading-snug">
+                      Academic Support assigned:
+                    </h2>
+                    <div className="text-base font-extrabold text-[#D62828]">
+                      {String(intervention.details.supportType || 'Tutoring')}
+                    </div>
+                    {intervention.details.supportSubjects ? (
+                      <p className="text-xs font-bold text-neutral-700">
+                        Subjects: {Array.isArray(intervention.details.supportSubjects)
+                          ? (intervention.details.supportSubjects as string[]).join(', ')
+                          : String(intervention.details.supportSubjects)}
+                      </p>
+                    ) : null}
+                  </>
+                )}
+                {(intervention.type === 'Other' || !intervention.type) && (
+                  <>
+                    <h2 className="text-base md:text-lg font-black text-[#0D0D0D] leading-snug">
+                      Support plan assigned by your advisor.
+                    </h2>
+                  </>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Schedule Breakdown */}
+          {/* Schedule / Date Block */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3.5 bg-neutral-50 border-2 border-[#0D0D0D]">
               <span className="text-[11px] font-black uppercase tracking-wider text-neutral-500 flex items-center gap-1">
@@ -124,7 +183,7 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
                 Session Timing
               </span>
               <span className="text-sm font-bold font-mono text-[#0D0D0D] block mt-1">
-                {intervention.details.schedule || 'To be confirmed with department'}
+                {(intervention.details.schedule as string) || 'To be confirmed with department'}
               </span>
             </div>
           </div>
@@ -158,9 +217,9 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
               <span>What to bring &amp; expectations</span>
             </div>
             <div className="text-neutral-700 font-medium space-y-1">
-              {intervention.type.toLowerCase().includes('counseling') ? (
-                <p>This is a safe, confidential space. Please come prepared to discuss how you're balancing your workload, any personal or academic challenges you're facing, and how we can best support your well-being.</p>
-              ) : intervention.type.toLowerCase().includes('financial') ? (
+              {intervention.type === 'Counseling' ? (
+                <p>This is a safe, confidential space. Please come prepared to discuss how you&apos;re balancing your workload, any personal or academic challenges you&apos;re facing, and how we can best support your well-being.</p>
+              ) : intervention.type === 'Financial Aid Referral' ? (
                 <p>Please bring any recent correspondence from the financial aid office, your student ID, and an outline of your current financial concerns so we can explore scholarships or payment plans.</p>
               ) : (
                 <p>Please attend with your course syllabus, recent graded assignments, and any specific homework questions. Mentors are here to reinforce fundamentals and ensure you stay on pace for the upcoming term.</p>

@@ -102,7 +102,7 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
         const name = row.name?.trim() || sid;
         newDetails[sid] = {
           studentId: sid, name, department: row.department?.trim() || 'Computer Science', year: parseInt(row.year, 10) || 1,
-          riskScore: 0, riskLevel: 'Low', contributingFactors: [], attendanceHistory: [], subjectAttendance: [], termTests: [], endSemResult: { status: 'Upcoming' }, lastSemResult: { score: 0, maxMarks: 0 }, aiExplanation: '', suggestedAction: 'Monitor',
+          riskScore: 0, riskLevel: 'Low', contributingFactors: [], attendanceHistory: [], subjectAttendance: [], termTests: [], endSemResult: { status: 'Upcoming' }, lastSemResult: { score: 0, maxMarks: 0 }, aiExplanation: '', suggestedAction: 'Monitor', interventionStatus: 'None'
         };
         if (!newStudents.find(s => s.studentId === sid)) {
           newStudents.push({ studentId: sid, name, department: newDetails[sid].department, year: newDetails[sid].year, riskScore: 0, riskLevel: 'Low', interventionStatus: 'None' });
@@ -173,7 +173,7 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
         }
       } else if (uploadType === 'Backlogs') {
         const count = parseInt(row.backlogCount || '0', 10);
-        const subjects = row.backlogSubjects ? row.backlogSubjects.split(',').map((s: string) => s.trim()) : [];
+        const subjects = row.backlogSubjects ? row.backlogSubjects.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean) : [];
         if (!isNaN(count)) {
           existing.backlogCount = count;
           existing.backlogSubjects = subjects;
@@ -187,6 +187,22 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
           existing.aiExplanation = generateFallbackExplanation({ name: existing.name, department: existing.department, year: existing.year }, result);
         }
+      } else if (uploadType === 'LastSemResult') {
+        const score = parseFloat(row.score || row.marks || '0');
+        const maxMarks = parseFloat(row.maxMarks || '100');
+        if (!isNaN(score)) {
+          existing.lastSemResult = { score, maxMarks };
+        }
+      } else if (uploadType === 'EndSemResult') {
+        const scoreStr = row.score || row.marks || '';
+        const statusStr = row.status || (scoreStr ? 'Completed' : 'Upcoming');
+        if (statusStr === 'Upcoming' || scoreStr === '' || scoreStr?.toLowerCase() === 'upcoming') {
+          existing.endSemResult = { status: 'Upcoming' };
+        } else {
+          const score = parseFloat(scoreStr);
+          const maxMarks = parseFloat(row.maxMarks || '100');
+          existing.endSemResult = { score: isNaN(score) ? undefined : score, maxMarks, status: 'Completed' };
+        }
       }
 
       newDetails[sid] = existing;
@@ -198,30 +214,30 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
     });
 
     setDetailsMap(newDetails);
-    
-    // Server Sync
+    setStudents(newStudents);  // update dashboard immediately
+
+    // Server Sync (fire and forget)
+    const studentsArray = Object.values(newDetails);
     fetch('/api/students', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ students: Object.values(newDetails) })
-    }).then(() => {
-      fetch('/api/students').then(r => r.json()).then(setStudents);
-    });
+      body: JSON.stringify(studentsArray)
+    }).catch(e => console.error('Student sync failed', e));
 
     const newLog: UploadLog = {
       uploadedAt: new Date().toISOString(),
       fileName: fileName || `dataset_${uploadType}.csv`,
-      week: weekLabel,
+      week: weekLabel || 'Initial',
       type: uploadType,
       studentsUpdated: updatedCount,
       uploadedBy: 'Mentor',
-      status: 'Success'
-    } as UploadLog & { status: string };
+      rawData: parsedData,
+    } as unknown as UploadLog;
     
     setUploadHistory(prev => [newLog, ...prev]);
     fetch('/api/history', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newLog)
-    });
+      body: JSON.stringify({ ...newLog, rawData: parsedData })
+    }).catch(e => console.error('History sync failed', e));
 
     return { success: true, updatedCount, skippedCount };
   };
@@ -242,19 +258,31 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
   };
 
   const handleInterventionAssigned = async (payload: MentorActionPayload) => {
+    const status = payload.status || 'Active';
+
+    if (status === 'Notified') {
+      // Parent/Guardian Notified is a timestamped log only.
+      await fetch(`/api/students/${payload.studentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationLog: payload })
+      });
+      return;
+    }
+
     const activeIntervention = {
       type: payload.type,
       details: payload.details,
-      status: 'Active',
+      status: status,
       assignedDate: payload.startDate,
     };
 
-    setStudents(prev => prev.map(s => s.studentId === payload.studentId ? { ...s, interventionStatus: 'Active' } : s));
+    setStudents(prev => prev.map(s => s.studentId === payload.studentId ? { ...s, interventionStatus: status as import('@/lib/types').InterventionStatus } : s));
     setDetailsMap(prev => ({
       ...prev,
       [payload.studentId]: {
         ...prev[payload.studentId],
-        interventionStatus: 'Active',
+        interventionStatus: status as import('@/lib/types').InterventionStatus,
         activeIntervention
       }
     }));
@@ -262,7 +290,7 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
     await fetch(`/api/students/${payload.studentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interventionStatus: 'Active', activeIntervention })
+      body: JSON.stringify({ interventionStatus: status, activeIntervention })
     });
   };
 

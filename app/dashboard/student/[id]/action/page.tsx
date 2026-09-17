@@ -34,11 +34,7 @@ export default function MentorActionPage({ params }: { params: Promise<{ id: str
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
       <MentorActionPanel
-        studentId={detail.studentId}
-        studentName={detail.name}
-        riskScore={detail.riskScore}
-        suggestedAction={detail.suggestedAction}
-        dominantFactor={detail.contributingFactors[0]?.factor ?? 'Risk Factors'}
+        student={detail}
         onBack={() => router.push(`/dashboard/student/${id}`)}
         onSubmitSuccess={handleInterventionAssigned}
         onNavigateToOutcomeView={(sid) => router.push(`/dashboard/student/${sid}/outcome`)}

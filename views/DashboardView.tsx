@@ -271,20 +271,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex flex-wrap gap-2">
-                    {(['WeeklyAttendance', 'SubjectAttendance', 'UnitTest1', 'UnitTest2', 'Backlogs', 'FeeStatus'] as const).map(type => (
-                      <button
-                        key={type}
-                        onClick={() => {
-                          setUploadType(type);
-                          setUploadedFile(null);
-                          setUploadMessage(null);
-                        }}
-                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
-                      >
-                        {type.replace(/([A-Z])/g, ' $1').trim()}
-                      </button>
-                    ))}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 self-center mr-1">Weekly</span>
+                      {(['WeeklyAttendance', 'SubjectAttendance'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => { setUploadType(type); setUploadedFile(null); setUploadMessage(null); }}
+                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
+                        >
+                          {type === 'WeeklyAttendance' ? 'Overall Attendance' : 'Subject Attendance'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 self-center mr-1">Tests</span>
+                      {(['UnitTest1', 'UnitTest2'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => { setUploadType(type); setUploadedFile(null); setUploadMessage(null); }}
+                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
+                        >
+                          {type === 'UnitTest1' ? 'Unit Test 1' : 'Unit Test 2'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 self-center mr-1">Semester</span>
+                      {(['LastSemResult', 'EndSemResult'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => { setUploadType(type); setUploadedFile(null); setUploadMessage(null); }}
+                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
+                        >
+                          {type === 'LastSemResult' ? 'Last Sem Result' : 'End Sem Result'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-neutral-500 self-center mr-1">Other</span>
+                      {(['Backlogs', 'FeeStatus'] as const).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => { setUploadType(type); setUploadedFile(null); setUploadMessage(null); }}
+                          className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border-2 border-[#0D0D0D] transition-colors shadow-[2px_2px_0px_#0D0D0D] ${uploadType === type ? 'bg-[#0D0D0D] text-white' : 'bg-white text-[#0D0D0D] hover:bg-neutral-100'}`}
+                        >
+                          {type === 'FeeStatus' ? 'Fee Status' : 'Backlogs'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   
                   <div className="flex items-center gap-3 w-full border-t-2 border-neutral-300 pt-3 mt-1">
