@@ -129,17 +129,16 @@ export function createIntervention(payload: MentorActionPayload, baselineRiskSco
     },
   };
 
-  // Create outcome record
-  const currentScore = detailsStore[payload.studentId]?.riskScore ?? baselineRiskScore;
+  // Store only the immutable baseline — current score will be recalculated at read time
   outcomeStore[payload.studentId] = {
     studentId: payload.studentId,
     name: detail?.name ?? '',
     intervention: { type: payload.type, details: payload.details, startDate: payload.startDate },
     baselineScore: baselineRiskScore,
-    currentScore,
-    scoreDelta: currentScore - baselineRiskScore,
+    currentScore: baselineRiskScore,  // placeholder; overwritten in getOutcome
+    scoreDelta: 0,
     outcome: 'No Change',
-    checkpointDate: new Date().toISOString().split('T')[0],
+    checkpointDate: payload.startDate,
   };
 
   return record;
@@ -159,7 +158,51 @@ export function resolveIntervention(studentId: string): void {
 }
 
 export function getOutcome(studentId: string): OutcomeComparisonData | null {
-  return outcomeStore[studentId] ?? null;
+  const stored = outcomeStore[studentId];
+  if (!stored) return null;
+
+  // Recalculate current score live from the latest student data
+  const studentDetail = detailsStore[studentId];
+  const currentScore = studentDetail?.riskScore ?? stored.baselineScore;
+  const scoreDelta = currentScore - stored.baselineScore;
+
+  let outcome: 'Improving' | 'No Change' | 'Worsening';
+  if (scoreDelta < -2) outcome = 'Improving';
+  else if (scoreDelta > 2) outcome = 'Worsening';
+  else outcome = 'No Change';
+
+  // Find the most recent data date from attendance history or term tests
+  let latestDataDate = stored.intervention.startDate;
+  let hasNewData = false;
+
+  if (studentDetail) {
+    // Check weekly attendance for most recent week label
+    for (const entry of (studentDetail.attendanceHistory ?? [])) {
+      // week labels may be 'Week 3' style strings; use index order instead of date parse
+      hasNewData = true;
+      latestDataDate = 'latest-upload';
+    }
+    // Check term test dates
+    for (const test of (studentDetail.termTests ?? [])) {
+      if (test.date && test.date > latestDataDate) {
+        latestDataDate = test.date;
+        hasNewData = true;
+      }
+    }
+  }
+
+  // If no new data has arrived since the intervention, flag the checkpoint specially
+  const checkpointDate = hasNewData
+    ? (latestDataDate === 'latest-upload' ? new Date().toISOString().split('T')[0] : latestDataDate)
+    : '__awaiting__';
+
+  return {
+    ...stored,
+    currentScore,
+    scoreDelta,
+    outcome,
+    checkpointDate,
+  };
 }
 
 export function bulkUpdateStudents(

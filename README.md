@@ -1,6 +1,6 @@
-# EarlyAlert — Predictive Student Dropout Detection 🚀
+# Sentinel — Predictive Student Dropout Detection 🚀
 
-EarlyAlert is an AI-powered academic retention platform built for **Hack2Ignite**. It helps mentors and educators identify at-risk students before they drop out, by analyzing key factors like attendance, grades, backlogs, fee status, and engagement. 
+Sentinel is an AI-powered academic retention platform built for **Hack2Ignite**. It helps mentors and educators identify at-risk students before they drop out, by analyzing key factors like attendance, grades, backlogs, fee status, and engagement. 
 
 The platform features a deterministic risk engine and uses **Groq AI (Llama 3.1)** to generate human-readable diagnostic explanations for educators.
 
@@ -88,7 +88,7 @@ hack2ignite/
 
 ## 🧠 How the AI Works
 
-Unlike standard LLM wrappers, **EarlyAlert uses AI exclusively as a translation layer, never for scoring.** 
+Unlike standard LLM wrappers, **Sentinel uses AI exclusively as a translation layer, never for scoring.** 
 
 1. The deterministic engine calculates that a student has a score of `78/100` due to a 20% attendance drop and 3 backlogs.
 2. The server-side API securely sends this structured data to the Groq API (`llama-3.1-8b-instant`).

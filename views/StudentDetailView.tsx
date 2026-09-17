@@ -159,13 +159,17 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         {/* Action Prompt Banner */}
         {hasIntervention ? (
           <div className="mt-5 p-4 bg-[#4ADE80] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[4px_4px_0px_#0D0D0D]">
-            <div className="space-y-0.5">
+            <div className="space-y-1">
               <span className="text-[11px] font-black uppercase tracking-wider text-[#0D0D0D] flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5" />
                 Intervention Assigned
               </span>
-              <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
-                Active Intervention Plan
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
+                  Active Intervention Plan
+                </div>
+                {/* Risk badge stays visible alongside monitoring badge */}
+                <RiskBadge riskLevel={student.riskLevel} size="sm" />
               </div>
             </div>
 
@@ -334,7 +338,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-neutral-600" />
           <span className="text-xs font-bold text-neutral-700">
-            Last diagnostic refresh: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} &bull; EarlyAlert Inference Engine v1.0
+            Last diagnostic refresh: {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} &bull; Sentinel Inference Engine v1.0
           </span>
         </div>
         <div className="flex items-center gap-3">

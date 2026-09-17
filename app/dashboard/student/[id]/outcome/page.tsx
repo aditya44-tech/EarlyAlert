@@ -3,15 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
-import { useEarlyAlert } from '@/app/providers';
+import { useSentinel } from '@/app/providers';
 import { OutcomeComparisonView } from '@/views/OutcomeComparisonView';
-import { StudentDetail, OutcomeComparisonData } from '@/lib/types';
+import { OutcomeComparisonData } from '@/lib/types';
 
 export default function MentorOutcomePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { authUser, fetchStudentDetail, handleResolveIntervention } = useEarlyAlert();
+  const { authUser, handleResolveIntervention } = useSentinel();
   const router = useRouter();
-  const [detail, setDetail] = useState<StudentDetail | null>(null);
+  const [outcomeData, setOutcomeData] = useState<OutcomeComparisonData | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
     if (!authUser) {
@@ -23,28 +24,48 @@ export default function MentorOutcomePage({ params }: { params: Promise<{ id: st
 
   useEffect(() => {
     if (id) {
-      fetchStudentDetail(id).then(d => {
-        if (d) setDetail(d);
-      });
+      fetch(`/api/outcomes/${id}`)
+        .then(res => {
+          if (!res.ok) { setNotFound(true); return null; }
+          return res.json();
+        })
+        .then(data => {
+          if (data?.outcome) setOutcomeData(data.outcome);
+        })
+        .catch(() => setNotFound(true));
     }
-  }, [id, fetchStudentDetail]);
+  }, [id]);
 
-  if (!authUser || authUser.role !== 'mentor' || !detail) return null;
+  if (!authUser || authUser.role !== 'mentor') return null;
 
-  const outcomeData: OutcomeComparisonData = {
-    studentId: detail.studentId,
-    name: detail.name,
-    intervention: {
-      type: detail.activeIntervention?.type ?? detail.suggestedAction?.split('/')[0]?.trim() ?? 'Monitor',
-      details: detail.activeIntervention?.details ?? { subject: 'Pending Configuration', schedule: 'TBD' },
-      startDate: detail.activeIntervention?.assignedDate ?? new Date().toISOString().split('T')[0],
-    },
-    baselineScore: detail.riskScore,
-    currentScore: detail.riskScore,
-    scoreDelta: 0,
-    outcome: 'No Change',
-    checkpointDate: new Date().toISOString().split('T')[0],
-  };
+  if (notFound) {
+    return (
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <div className="neo-card p-8 bg-white text-center space-y-4">
+          <p className="text-lg font-black text-[#0D0D0D]">No active intervention found for this student.</p>
+          <button
+            onClick={() => router.push(`/dashboard/student/${id}`)}
+            className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider"
+          >
+            ← Back to Profile
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!outcomeData) {
+    return (
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <div className="neo-card p-8 bg-white text-center">
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 bg-neutral-200 rounded w-1/2 mx-auto" />
+            <div className="h-4 bg-neutral-200 rounded w-3/4 mx-auto" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">

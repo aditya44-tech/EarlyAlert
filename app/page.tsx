@@ -2,11 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useEarlyAlert } from '@/app/providers';
+import { useSentinel } from '@/app/providers';
 import { LoginView } from '@/views/LoginView';
 
 export default function HomePage() {
-  const { authUser, students, login } = useEarlyAlert();
+  const { authUser, students, login } = useSentinel();
   const router = useRouter();
 
   useEffect(() => {

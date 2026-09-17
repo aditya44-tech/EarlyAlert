@@ -2,10 +2,10 @@
 
 import React from 'react';
 import { UserCheck, GraduationCap, LogOut } from 'lucide-react';
-import { useEarlyAlert } from '@/app/providers';
+import { useSentinel } from '@/app/providers';
 
 export function Header() {
-  const { authUser, logout } = useEarlyAlert();
+  const { authUser, logout } = useSentinel();
 
   return (
     <header className="bg-[#0D0D0D] text-white border-b-4 border-[#0D0D0D] sticky top-0 z-40">

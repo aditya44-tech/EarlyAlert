@@ -2,11 +2,11 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useEarlyAlert } from '@/app/providers';
+import { useSentinel } from '@/app/providers';
 import { DashboardView } from '@/views/DashboardView';
 
 export default function DashboardPage() {
-  const { authUser, students, uploadHistory, handleDataUpload, handleClearAllData, handleDeleteUpload } = useEarlyAlert();
+  const { authUser, students, uploadHistory, handleDataUpload, handleClearAllData, handleDeleteUpload } = useSentinel();
   const router = useRouter();
 
   useEffect(() => {

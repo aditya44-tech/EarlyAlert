@@ -21,7 +21,7 @@ interface LoginViewProps {
   onLogin: (user: AuthUser) => void;
 }
 
-const MENTOR_PASSWORD = 'earlyalert123';
+const MENTOR_PASSWORD = 'sentinel123';
 
 export const LoginView: React.FC<LoginViewProps> = ({ students, onLogin }) => {
   const [tab, setTab] = useState<'mentor' | 'student'>('mentor');
@@ -68,7 +68,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ students, onLogin }) => {
             EA
           </div>
           <div className="text-left">
-            <div className="font-black text-2xl uppercase tracking-tight text-[#0D0D0D]">EarlyAlert</div>
+            <div className="font-black text-2xl uppercase tracking-tight text-[#0D0D0D]">Sentinel</div>
             <div className="text-xs font-bold text-neutral-500 uppercase tracking-wider">Predictive Engine</div>
           </div>
         </div>
@@ -198,7 +198,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ students, onLogin }) => {
         </div>
 
         <div className="px-6 pb-5 text-center text-xs text-neutral-400 font-medium border-t border-neutral-100 pt-4">
-          EarlyAlert · Powered by Groq AI · Secure Access Only
+          Sentinel · Powered by Groq AI · Secure Access Only
         </div>
       </div>
     </div>

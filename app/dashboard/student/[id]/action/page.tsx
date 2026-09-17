@@ -3,13 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
-import { useEarlyAlert } from '@/app/providers';
+import { useSentinel } from '@/app/providers';
 import { MentorActionPanel } from '@/views/MentorActionPanel';
 import { StudentDetail } from '@/lib/types';
 
 export default function MentorActionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { authUser, fetchStudentDetail, handleInterventionAssigned } = useEarlyAlert();
+  const { authUser, fetchStudentDetail, handleInterventionAssigned } = useSentinel();
   const router = useRouter();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
 

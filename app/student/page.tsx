@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useEarlyAlert } from '@/app/providers';
+import { useSentinel } from '@/app/providers';
 import { StudentFacingStatusView } from '@/views/StudentFacingStatusView';
 import { StudentStatusData, StudentDetail } from '@/lib/types';
 
 export default function StudentPortalPage() {
-  const { authUser, fetchStudentDetail } = useEarlyAlert();
+  const { authUser, fetchStudentDetail } = useSentinel();
   const router = useRouter();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
 

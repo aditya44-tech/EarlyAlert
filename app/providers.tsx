@@ -5,7 +5,7 @@ import { AuthUser } from '@/views/LoginView';
 import { StudentSummary, StudentDetail, UploadLog, MentorActionPayload, OutcomeComparisonData } from '@/lib/types';
 import { computeRiskScore, generateFallbackExplanation, RawStudentData } from '@/lib/riskEngine';
 
-interface EarlyAlertContextType {
+interface SentinelContextType {
   authUser: AuthUser | null;
   role: 'mentor' | 'student';
   login: (user: AuthUser) => void;
@@ -23,9 +23,9 @@ interface EarlyAlertContextType {
   handleResolveIntervention: (studentId: string) => Promise<void>;
 }
 
-const EarlyAlertContext = createContext<EarlyAlertContextType | undefined>(undefined);
+const SentinelContext = createContext<SentinelContextType | undefined>(undefined);
 
-export function EarlyAlertProvider({ children }: { children: React.ReactNode }) {
+export function SentinelProvider({ children }: { children: React.ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [role, setRole] = useState<'mentor' | 'student'>('mentor');
   
@@ -319,7 +319,7 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
   if (!isClient) return null;
 
   return (
-    <EarlyAlertContext.Provider value={{
+    <SentinelContext.Provider value={{
       authUser, role, login, logout,
       students, setStudents,
       uploadHistory, setUploadHistory,
@@ -328,14 +328,14 @@ export function EarlyAlertProvider({ children }: { children: React.ReactNode }) 
       handleInterventionAssigned, handleResolveIntervention
     }}>
       {children}
-    </EarlyAlertContext.Provider>
+    </SentinelContext.Provider>
   );
 }
 
-export function useEarlyAlert() {
-  const context = useContext(EarlyAlertContext);
+export function useSentinel() {
+  const context = useContext(SentinelContext);
   if (context === undefined) {
-    throw new Error('useEarlyAlert must be used within an EarlyAlertProvider');
+    throw new Error('useSentinel must be used within a SentinelProvider');
   }
   return context;
 }

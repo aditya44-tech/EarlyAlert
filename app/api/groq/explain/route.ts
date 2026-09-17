@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
         .map(f => `- ${f.factor} (${f.points} pts): ${f.reason}`)
         .join('\n');
 
-      prompt = `You are an academic advisor AI for EarlyAlert, a student dropout prevention system.
+      prompt = `You are an academic advisor AI for Sentinel, a student dropout prevention system.
 A student has been flagged with a ${riskLevel} dropout risk score of ${riskScore}/100.
 
 Student: ${studentName}, Year ${year}, ${department}
