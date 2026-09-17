@@ -114,7 +114,9 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       if (uploadType === 'WeeklyAttendance') {
         const att = parseFloat(row.attendance);
         if (!isNaN(att)) {
-          existing.attendanceHistory = [...existing.attendanceHistory, { week: weekLabel, percentage: att }];
+          // Upsert by week label — replace existing entry for same week, otherwise append
+          const withoutThisWeek = existing.attendanceHistory.filter(h => h.week !== weekLabel);
+          existing.attendanceHistory = [...withoutThisWeek, { week: weekLabel, percentage: att }];
           const raw: RawStudentData = {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
             attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,

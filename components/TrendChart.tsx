@@ -1,8 +1,9 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -45,6 +46,15 @@ const CustomNeoTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label
   return null;
 };
 
+/** Extract numeric part from a week label: "Week 3" -> 3, "Initial" -> 0 */
+function weekSortKey(label: string): number {
+  if (!label) return 999;
+  const lower = label.toLowerCase();
+  if (lower === 'initial') return 0;
+  const match = lower.match(/\d+/);
+  return match ? parseInt(match[0], 10) : 999;
+}
+
 export const TrendChart: React.FC<TrendChartProps> = ({
   data,
   xKey,
@@ -55,8 +65,35 @@ export const TrendChart: React.FC<TrendChartProps> = ({
   targetThreshold,
   thresholdLabel,
   height = 240,
-  yDomain = [0, 100],
+  yDomain,
 }) => {
+  const sortedData = [...data].sort((a, b) => {
+    const aLabel = String(a[xKey] ?? '');
+    const bLabel = String(b[xKey] ?? '');
+    return weekSortKey(aLabel) - weekSortKey(bLabel);
+  });
+
+  const computedDomain: [number, number] = React.useMemo(() => {
+    if (yDomain) return yDomain;
+    if (sortedData.length === 0) return [0, 100];
+    const values = sortedData.map(d => Number(d[yKey])).filter(v => !isNaN(v));
+    if (values.length === 0) return [0, 100];
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const pad = Math.max(5, (maxVal - minVal) * 0.15);
+    return [Math.max(0, Math.floor(minVal - pad)), Math.min(100, Math.ceil(maxVal + pad))];
+  }, [sortedData, yKey, yDomain]);
+
+  if (sortedData.length === 0) {
+    return (
+      <div className="w-full flex items-center justify-center" style={{ height }}>
+        <p className="text-xs text-neutral-400 font-bold uppercase tracking-wider">
+          No data uploaded yet
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full">
       {title && (
@@ -69,10 +106,15 @@ export const TrendChart: React.FC<TrendChartProps> = ({
           )}
         </div>
       )}
-
       <div style={{ width: '100%', height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
+          <ComposedChart data={sortedData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
+            <defs>
+              <linearGradient id={`areaGrad-${yKey}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={lineColor} stopOpacity={0.18} />
+                <stop offset="95%" stopColor={lineColor} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
             <CartesianGrid stroke="#0D0D0D" strokeDasharray="3 3" strokeOpacity={0.2} />
             <XAxis
               dataKey={xKey}
@@ -82,7 +124,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({
               tickLine={{ stroke: '#0D0D0D', strokeWidth: 2 }}
             />
             <YAxis
-              domain={yDomain}
+              domain={computedDomain}
               stroke="#0D0D0D"
               strokeWidth={2}
               tick={{ fill: '#0D0D0D', fontSize: 11, fontWeight: 700 }}
@@ -108,26 +150,23 @@ export const TrendChart: React.FC<TrendChartProps> = ({
                 }
               />
             )}
+            <Area
+              type="monotone"
+              dataKey={yKey}
+              fill={`url(#areaGrad-${yKey})`}
+              stroke="none"
+              isAnimationActive={true}
+            />
             <Line
               type="linear"
               dataKey={yKey}
               stroke={lineColor}
               strokeWidth={3.5}
-              dot={{
-                r: 5,
-                fill: '#FFFFFF',
-                stroke: '#0D0D0D',
-                strokeWidth: 2.5,
-              }}
-              activeDot={{
-                r: 7,
-                fill: lineColor,
-                stroke: '#0D0D0D',
-                strokeWidth: 3,
-              }}
+              dot={{ r: 5, fill: '#FFFFFF', stroke: '#0D0D0D', strokeWidth: 2.5 }}
+              activeDot={{ r: 7, fill: lineColor, stroke: '#0D0D0D', strokeWidth: 3 }}
               isAnimationActive={true}
             />
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
