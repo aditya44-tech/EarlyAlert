@@ -15,18 +15,35 @@ if (!cached) {
   cached = (global as any).mongoose = { conn: null, promise: null };
 }
 
+/**
+ * When the cluster is unreachable, stop hammering it with connection attempts.
+ * After this many ms, allow one retry (in case the cluster was resumed).
+ */
+const COOLDOWN_MS = 60_000; // 1 minute
+let lastFailedAt = 0;
+
 export async function isDbConnected(): Promise<boolean> {
   const currentState = mongoose.connection.readyState as number;
   if (currentState === 1) {
+    lastFailedAt = 0; // reset cooldown on success
     return true;
   }
   if (!MONGODB_URI) {
     return false;
   }
+  // If we recently failed, skip the expensive connection attempt entirely.
+  if (lastFailedAt && Date.now() - lastFailedAt < COOLDOWN_MS) {
+    return false;
+  }
   try {
     const conn = await dbConnect();
-    return !!conn && (mongoose.connection.readyState as number) === 1;
+    if (!conn) {
+      lastFailedAt = Date.now();
+      return false;
+    }
+    return (mongoose.connection.readyState as number) === 1;
   } catch {
+    lastFailedAt = Date.now();
     return false;
   }
 }
