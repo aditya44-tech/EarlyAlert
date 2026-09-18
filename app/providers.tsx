@@ -16,9 +16,12 @@ interface SentinelContextType {
   uploadHistory: UploadLog[];
   setUploadHistory: React.Dispatch<React.SetStateAction<UploadLog[]>>;
   detailsMap: Record<string, StudentDetail>;
+  /** Bumped whenever the dataset changes (upload, reset, delete) so pages re-read from the server. */
+  dataVersion: number;
+  isResetting: boolean;
   fetchStudentDetail: (id: string, opts?: { force?: boolean }) => Promise<StudentDetail | null>;
   handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => Promise<{ success: boolean; updatedCount: number; skippedCount: number }>;
-  handleClearAllData: () => void;
+  handleClearAllData: () => Promise<void>;
   handleDeleteUpload: (uploadedAt: string) => Promise<void>;
   handleInterventionAssigned: (payload: MentorActionPayload) => Promise<void>;
   handleResolveIntervention: (studentId: string) => Promise<void>;
@@ -34,6 +37,22 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [uploadHistory, setUploadHistory] = useState<UploadLog[]>([]);
   const [detailsMap, setDetailsMap] = useState<Record<string, StudentDetail>>({});
+  const [dataVersion, setDataVersion] = useState(0);
+  const [isResetting, setIsResetting] = useState(false);
+
+  /** Re-read the authoritative list from the server. */
+  const refreshFromServer = async () => {
+    try {
+      const [studRes, histRes] = await Promise.all([
+        fetch('/api/students', { cache: 'no-store' }),
+        fetch('/api/history', { cache: 'no-store' }),
+      ]);
+      setStudents(studRes.ok ? await studRes.json() : []);
+      setUploadHistory(histRes.ok ? await histRes.json() : []);
+    } catch (e) {
+      console.error('Failed to refresh from server', e);
+    }
+  };
 
   const [isClient, setIsClient] = useState(false);
 
@@ -101,22 +120,33 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
         .filter(Boolean)
     ));
 
-    const missingIds = affectedIds.filter(sid => !detailsMap[sid]);
-    const preloaded: Record<string, StudentDetail> = {};
-    if (missingIds.length > 0) {
-      await Promise.all(missingIds.map(async (sid) => {
-        try {
-          const res = await fetch(`/api/students/${sid}`);
-          if (!res.ok) return;
-          const data = await res.json();
-          if (data?.student) preloaded[sid] = data.student as StudentDetail;
-        } catch {
-          // Leave it missing — it will be treated as a brand-new student
-        }
-      }));
-    }
+    // The server is the authority for every student this upload touches. We read
+    // each record back before applying changes so that:
+    //   • a student we have never opened is not replaced by an empty stub, and
+    //   • a student the server no longer knows about (e.g. wiped by "Reset All
+    //     Data", possibly from another tab) becomes a brand-new record instead of
+    //     inheriting a stale intervention status from our cache.
+    const serverConfirm: { confirmed: Record<string, StudentDetail>; missing: Set<string> } =
+      { confirmed: {}, missing: new Set<string>() };
 
-    const newDetails = { ...detailsMap, ...preloaded };
+    await Promise.all(affectedIds.map(async (sid) => {
+      try {
+        const res = await fetch(`/api/students/${sid}`, { cache: 'no-store' });
+        if (res.status === 404) {
+          serverConfirm.missing.add(sid);
+          return;
+        }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.student) serverConfirm.confirmed[sid] = data.student as StudentDetail;
+      } catch {
+        // Network hiccup: keep whatever we already hold rather than dropping the
+        // student's real record.
+      }
+    }));
+
+    const newDetails: Record<string, StudentDetail> = { ...detailsMap, ...serverConfirm.confirmed };
+    for (const sid of serverConfirm.missing) delete newDetails[sid];
     let updatedCount = 0;
     let skippedCount = 0;
     const clearedHistoryIds = new Set<string>();
@@ -330,6 +360,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     } as unknown as UploadLog;
     
     setUploadHistory(prev => [newLog, ...prev]);
+    setDataVersion(v => v + 1);
     fetch('/api/history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -340,18 +371,32 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleClearAllData = async () => {
-    // Clear all client-side state immediately
+    setIsResetting(true);
+    // Clear all client-side state immediately so the UI never shows stale rows
+    // while the server catches up.
     setStudents([]);
     setDetailsMap({});
     setUploadHistory([]);
-    // Tell the server to wipe everything — students, history, and interventions.
-    // clearAllStudents() on the server now also clears state.interventions,
-    // state.statuses and state.outcomes, so a fresh upload starts with a blank slate.
-    await Promise.allSettled([
-      fetch('/api/students', { method: 'DELETE' }),
-      fetch('/api/history', { method: 'DELETE' }),
-      fetch('/api/interventions', { method: 'DELETE' }),
-    ]);
+
+    // Wipe every server-side store: students, details, interventions, outcomes
+    // and upload history. Awaiting these matters — a reset that is still in
+    // flight when the next upload lands would either wipe the fresh upload or
+    // leave the old intervention status behind.
+    try {
+      await Promise.all([
+        fetch('/api/students', { method: 'DELETE' }),
+        fetch('/api/history', { method: 'DELETE' }),
+        fetch('/api/interventions', { method: 'DELETE' }),
+      ]);
+    } catch (e) {
+      console.error('Failed to reset server data', e);
+    }
+
+    // Re-read from the server so the client reflects exactly what survived the
+    // reset instead of its own optimistic copy.
+    await refreshFromServer();
+    setDataVersion(v => v + 1);
+    setIsResetting(false);
   };
 
   const handleDeleteUpload = async (uploadedAt: string) => {
@@ -419,6 +464,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     }
 
     setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
+    setDataVersion(v => v + 1);
   };
 
   const handleInterventionAssigned = async (payload: MentorActionPayload) => {
@@ -561,7 +607,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       authUser, role, login, logout,
       students, setStudents,
       uploadHistory, setUploadHistory,
-      detailsMap, fetchStudentDetail,
+      detailsMap, dataVersion, isResetting, fetchStudentDetail,
       handleDataUpload, handleClearAllData, handleDeleteUpload,
       handleInterventionAssigned, handleResolveIntervention, handleReopenIntervention
     }}>

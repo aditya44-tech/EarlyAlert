@@ -36,6 +36,8 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const [groqExplanation, setGroqExplanation] = useState<string>(student.aiExplanation);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isGroqPowered, setIsGroqPowered] = useState(false);
+  const [usedFallback, setUsedFallback] = useState(false);
+  const [aiModel, setAiModel] = useState<string | null>(null);
   const [groqError, setGroqError] = useState<string | null>(null);
   const lastFetchedId = useRef<string>('');
 
@@ -44,10 +46,17 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const interventionResolved =
     student.interventionStatus === 'Resolved' || student.activeIntervention?.status === 'Resolved';
 
+  // With no contributing factors the engine recommends "Monitor" — routine
+  // observation, not a case to open. Offering an assignable action there led to
+  // empty "Other" interventions, so the banner becomes informational instead.
+  const noRiskFactors = (student.contributingFactors?.length ?? 0) === 0;
+
   // Synchronize local state and auto-fetch Groq AI narrative on student view load
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
     setIsGroqPowered(false);
+    setUsedFallback(false);
+    setAiModel(null);
     setGroqError(null);
     if (lastFetchedId.current !== student.studentId) {
       handleRefreshGroq();
@@ -73,15 +82,28 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
       });
       if (!res.ok) throw new Error('API Error');
       const data = await res.json();
-      
+
       const newExplanation = data.text || student.aiExplanation;
       setGroqExplanation(newExplanation);
-      if (data.powered) {
-        setIsGroqPowered(true);
+
+      // Make the source explicit: a live Groq narrative and a deterministic
+      // fallback must never look the same, otherwise a missing/invalid API key
+      // fails silently.
+      const powered = Boolean(data.powered) && !data.fallback;
+      setIsGroqPowered(powered);
+      setUsedFallback(!powered);
+      if (data.model) setAiModel(data.model);
+      if (!powered) {
+        setGroqError(
+          data.error
+            ? `Live AI narrative unavailable (${data.error}) — showing structured analysis.`
+            : 'Live AI narrative unavailable — showing structured analysis.',
+        );
       }
 
-      // Persist the newly generated explanation to the database so it survives refreshes
-      if (data.text) {
+      // Persist only a genuine Groq narrative: a transient API failure must not
+      // overwrite a good explanation with the deterministic fallback text.
+      if (powered && data.text) {
         await fetch(`/api/students/${student.studentId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -89,6 +111,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         });
       }
     } catch {
+      setUsedFallback(true);
       setGroqError('Groq API unavailable: showing structured analysis.');
     } finally {
       setIsAiLoading(false);
@@ -211,6 +234,21 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               </button>
             </div>
           </div>
+        ) : noRiskFactors ? (
+          <div className="mt-5 p-4 bg-[#E8F8F0] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[4px_4px_0px_#0D0D0D]">
+            <div className="space-y-0.5">
+              <span className="text-[11px] font-black uppercase tracking-wider text-neutral-600 flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5 text-[#2D9D5F]" />
+                No Action Needed
+              </span>
+              <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
+                No risk factors detected — routine monitoring only
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <RiskBadge riskLevel={student.riskLevel} size="sm" />
+            </div>
+          </div>
         ) : (
           <div className="mt-5 p-4 bg-[#FFFDEB] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-0.5">
@@ -248,9 +286,20 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               Predictive Risk Narrative &amp; Diagnostic Explanation
             </h3>
             {isGroqPowered && !isAiLoading && (
-              <span className="flex items-center gap-1 text-[10px] font-black bg-[#0D0D0D] text-[#F4C430] px-1.5 py-0.5 border border-[#0D0D0D]">
+              <span
+                className="flex items-center gap-1 text-[10px] font-black bg-[#0D0D0D] text-[#F4C430] px-1.5 py-0.5 border border-[#0D0D0D]"
+                title="Narrative generated live by the Groq API"
+              >
                 <Zap className="w-2.5 h-2.5" />
-                GROQ · qwen-3.8-27b
+                GROQ · {aiModel || 'qwen/qwen3.8-27b'}
+              </span>
+            )}
+            {usedFallback && !isAiLoading && (
+              <span
+                className="flex items-center gap-1 text-[10px] font-black bg-neutral-200 text-neutral-700 px-1.5 py-0.5 border border-[#0D0D0D]"
+                title="Deterministic template — the Groq call did not return a live narrative"
+              >
+                STRUCTURED FALLBACK
               </span>
             )}
           </div>
@@ -275,7 +324,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               {isAiLoading && (
                 <div className="flex items-center gap-2 text-xs font-bold text-neutral-600 pt-1">
                   <RefreshCw className="w-3 h-3 animate-spin text-[#D62828]" />
-                  <span>Synthesizing live narrative via Groq (qwen/qwen3.8-27b)...</span>
+                  <span>Synthesizing live narrative via Groq...</span>
                 </div>
               )}
             </div>
@@ -328,7 +377,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               })
               .map((item, idx) => ({
                 ...item,
-                displayWeek: `Week ${idx + 1}`,
+                displayWeek: item.week || `Week ${idx + 1}`,
               })) as unknown as Record<string, unknown>[]}
             xKey="displayWeek"
             yKey="percentage"
@@ -336,6 +385,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             lineColor="#D62828"
             targetThreshold={75}
             thresholdLabel="Min 75%"
+            yDomain={[0, 100]}
           />
         </div>
 
@@ -385,12 +435,14 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
           >
             Return to Cohort
           </button>
-          <button
-            onClick={() => onAssignAction(student.studentId, student.suggestedAction)}
-            className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider"
-          >
-            Assign Intervention
-          </button>
+          {!noRiskFactors && (
+            <button
+              onClick={() => onAssignAction(student.studentId, student.suggestedAction)}
+              className="neo-btn px-4 py-2 bg-[#D62828] text-white text-xs font-black uppercase tracking-wider"
+            >
+              Assign Intervention
+            </button>
+          )}
         </div>
       </div>
     </div>

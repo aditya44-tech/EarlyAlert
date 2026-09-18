@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ActionType, MentorActionPayload } from '@/lib/types';
+import { getActionTypeForSuggestion } from '@/lib/riskEngine';
 import {
   ArrowLeft,
   CheckCircle,
@@ -30,25 +31,8 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   const riskScore = student.riskScore;
   const suggestedAction = student.suggestedAction || 'Monitor';
   const dominantFactor = student.contributingFactors?.[0]?.factor || 'Risk Factors';
-  // Determine initial action type from suggestedAction
-  const getInitialActionType = (suggestion: string): ActionType => {
-    if (suggestion.toLowerCase().includes('extra class') || suggestion.toLowerCase().includes('tutoring')) {
-      return 'Extra Class';
-    }
-    if (suggestion.toLowerCase().includes('counseling')) {
-      return 'Counseling';
-    }
-    if (suggestion.toLowerCase().includes('financial')) {
-      return 'Financial Aid Referral';
-    }
-    if (suggestion.toLowerCase().includes('academic')) {
-      return 'Academic Support';
-    }
-    if (suggestion.toLowerCase().includes('parent')) {
-      return 'Parent/Guardian Notified';
-    }
-    return 'Other';
-  };
+  // The engine owns the recommendation wording → intervention type mapping.
+  const getInitialActionType = getActionTypeForSuggestion;
 
   const availableSubjects = Array.from(new Set([
     ...(student.subjectAttendance?.map(s => s.subject) || []),
@@ -56,16 +40,24 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
     'Data Structures', 'DBMS', 'Computational Math', 'Computer Network', 'Python Programming'
   ]));
 
-  // Recommend subject based on backlog (low grade) or lowest attendance
+  // Recommend subject: the engine's own recommendation wins (it already picked
+  // the weakest subject and prints it after the colon), then a backlog subject,
+  // then whichever subject has the lowest attendance.
+  const suggestedSubject = suggestedAction.includes(':')
+    ? suggestedAction.slice(suggestedAction.indexOf(':') + 1).trim()
+    : '';
+  const parsedBacklogSubjects = (student.backlogSubjects || [])
+    .flatMap(s => s.split(/[,;]/).map(str => str.trim()).filter(Boolean));
+
   let recommendedSubject = availableSubjects[0];
   let recommendationReason = '';
-  
-  if (student.backlogSubjects && student.backlogSubjects.length > 0) {
-    const parsedBacklogs = student.backlogSubjects.flatMap(s => s.split(/[,;]/).map(str => str.trim()).filter(Boolean));
-    if (parsedBacklogs.length > 0) {
-      recommendedSubject = parsedBacklogs[0];
-      recommendationReason = 'Low Grade';
-    }
+
+  if (suggestedSubject && availableSubjects.includes(suggestedSubject)) {
+    recommendedSubject = suggestedSubject;
+    recommendationReason = 'Engine Pick';
+  } else if (parsedBacklogSubjects.length > 0) {
+    recommendedSubject = parsedBacklogSubjects[0];
+    recommendationReason = 'Low Grade';
   } else if (student.subjectAttendance && student.subjectAttendance.length > 0) {
     recommendedSubject = student.subjectAttendance.reduce((min, curr) => curr.percentage < min.percentage ? curr : min, student.subjectAttendance[0]).subject;
     recommendationReason = 'Low Attendance';
@@ -91,6 +83,7 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
   const [submittedPayload, setSubmittedPayload] = useState<MentorActionPayload | null>(null);
   const [groqRationale, setGroqRationale] = useState<string>('');
   const [rationaleLoading, setRationaleLoading] = useState(false);
+  const [rationaleSource, setRationaleSource] = useState<'groq' | 'fallback' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,8 +145,10 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
       if (!res.ok) throw new Error('API Error');
       const data = await res.json();
       setGroqRationale(data.text);
+      setRationaleSource(Boolean(data.powered) && !data.fallback ? 'groq' : 'fallback');
     } catch {
       setGroqRationale(`"${actionType}" is the recommended intervention based on ${studentName}'s primary risk factor.`);
+      setRationaleSource('fallback');
     } finally {
       setRationaleLoading(false);
     }
@@ -195,7 +190,14 @@ export const MentorActionPanel: React.FC<MentorActionPanelProps> = ({
           <div className="bg-white text-[#0D0D0D] p-4 border-2 border-white">
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-3.5 h-3.5 text-[#D62828]" />
-              <span className="text-xs font-black uppercase tracking-wider text-neutral-600">AI Rationale (Groq)</span>
+              <span className="text-xs font-black uppercase tracking-wider text-neutral-600">
+                {rationaleSource === 'groq' ? 'AI Rationale (Groq)' : 'Intervention Rationale'}
+              </span>
+              {!rationaleLoading && rationaleSource === 'fallback' && (
+                <span className="text-[10px] font-black uppercase tracking-wider bg-neutral-200 text-neutral-700 px-1.5 py-0.5 border border-[#0D0D0D]">
+                  Structured Fallback
+                </span>
+              )}
             </div>
             {rationaleLoading ? (
               <div className="animate-pulse space-y-1.5">

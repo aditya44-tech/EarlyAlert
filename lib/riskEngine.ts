@@ -7,7 +7,7 @@
  * Groq API calls are handled by /api/groq/explain route (key stays server-side).
  */
 
-import type { ContributingFactor, RiskLevel } from './types';
+import type { ActionType, ContributingFactor, RiskLevel } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Raw student data shape (input to the engine)
@@ -230,6 +230,24 @@ export function getSuggestedAction(dominantFactor: string, student: RawStudentDa
     case 'Low Engagement': return 'Counseling / Check-in';
     default: return 'Monitor';
   }
+}
+
+/**
+ * Maps the engine's human-readable recommendation onto an intervention type the
+ * mentor action panel can actually file. Lives next to the recommendation table
+ * so the wording and the form can never drift apart.
+ *
+ * "Monitor" is deliberately not an assignable case: it means "no factors, keep
+ * watching", so it falls through to 'Other' and the UI offers no action link.
+ */
+export function getActionTypeForSuggestion(suggestion: string): ActionType {
+  const s = (suggestion || '').toLowerCase();
+  if (s.includes('extra class') || s.includes('tutoring')) return 'Extra Class';
+  if (s.includes('counseling')) return 'Counseling';
+  if (s.includes('financial')) return 'Financial Aid Referral';
+  if (s.includes('academic')) return 'Academic Support';
+  if (s.includes('parent')) return 'Parent/Guardian Notified';
+  return 'Other';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

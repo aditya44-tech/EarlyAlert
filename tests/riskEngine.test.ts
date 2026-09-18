@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import {
   computeRiskScore,
   getSuggestedAction,
+  getActionTypeForSuggestion,
   generateFallbackExplanation,
   type RawStudentData,
 } from '../lib/riskEngine.ts';
@@ -283,6 +284,35 @@ test('suggested action map covers every factor and the default', () => {
   for (const [factor, expected] of map) {
     const result = getSuggestedAction(factor, student);
     assert.ok(result.startsWith(expected), `factor=${factor}, got ${result}`);
+  }
+});
+
+test('every recommendation the engine can produce maps to a real intervention type', () => {
+  const expectations: [string, string][] = [
+    ['Extra Class / Tutoring: DBMS', 'Extra Class'],
+    ['Extra Class / Tutoring', 'Extra Class'],
+    ['Counseling / Check-in', 'Counseling'],
+    ['Financial Aid Referral', 'Financial Aid Referral'],
+    ['Academic Support', 'Academic Support'],
+  ];
+  for (const [suggestion, expected] of expectations) {
+    assert.equal(getActionTypeForSuggestion(suggestion), expected, suggestion);
+  }
+
+  // "Monitor" means "no factors, keep watching" — it must never become an
+  // assignable case with an empty payload.
+  assert.equal(getActionTypeForSuggestion('Monitor'), 'Other');
+  assert.equal(getActionTypeForSuggestion(''), 'Other');
+
+  // Every factor-driven recommendation must land on a real form.
+  const student = makeStudent();
+  for (const factor of ['Grade Decline', 'Attendance Decline', 'Fee Overdue', 'Backlogs', 'Low Engagement']) {
+    const suggestion = getSuggestedAction(factor, student);
+    assert.notEqual(
+      getActionTypeForSuggestion(suggestion),
+      'Other',
+      `factor=${factor} produced an unassignable recommendation: ${suggestion}`,
+    );
   }
 });
 

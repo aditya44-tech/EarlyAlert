@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
 import { useSentinel } from '@/app/providers';
@@ -9,9 +9,14 @@ import { StudentDetail } from '@/lib/types';
 
 export default function MentorStudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { authUser, fetchStudentDetail } = useSentinel();
+  const { authUser, fetchStudentDetail, dataVersion } = useSentinel();
   const router = useRouter();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
+
+  // `fetchStudentDetail` is recreated on every provider render, so hold it in a
+  // ref: using it as an effect dependency re-triggered the fetch in a loop.
+  const fetchRef = useRef(fetchStudentDetail);
+  fetchRef.current = fetchStudentDetail;
 
   useEffect(() => {
     if (!authUser) {
@@ -22,12 +27,24 @@ export default function MentorStudentDetailPage({ params }: { params: Promise<{ 
   }, [authUser, router]);
 
   useEffect(() => {
-    if (id) {
-      fetchStudentDetail(id).then(d => {
-        if (d) setDetail(d);
-      });
-    }
-  }, [id, fetchStudentDetail]);
+    if (!id) return;
+    let cancelled = false;
+
+    // Always read the live record: after a reset (or an upload/delete) the
+    // student may have been wiped, and a cached copy would keep showing the old
+    // intervention status.
+    fetchRef.current(id, { force: true }).then(d => {
+      if (cancelled) return;
+      if (d) {
+        setDetail(d);
+      } else {
+        setDetail(null);
+        router.push('/dashboard');
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [id, dataVersion, router]);
 
   if (!authUser || authUser.role !== 'mentor' || !detail) return null;
 

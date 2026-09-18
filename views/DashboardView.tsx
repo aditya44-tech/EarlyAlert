@@ -26,8 +26,9 @@ interface DashboardViewProps {
   onSelectStudent: (studentId: string) => void;
   uploadHistory?: UploadLog[];
   onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string, overwrite?: boolean) => Promise<{ success: boolean; updatedCount: number; skippedCount: number }>;
-  onClearAllData?: () => void;
+  onClearAllData?: () => void | Promise<void>;
   onDeleteUpload?: (uploadedAt: string) => Promise<void>;
+  isResetting?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -37,6 +38,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onDataUpload,
   onClearAllData,
   onDeleteUpload,
+  isResetting = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('All');
@@ -260,8 +262,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </button>
           </div>
           {onClearAllData && (
-            <button onClick={onClearAllData} className="neo-btn px-3 py-1 bg-[#D62828] text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:bg-red-700">
-              <Trash2 className="w-3 h-3" /> Reset All Data
+            <button
+              onClick={() => { void onClearAllData?.(); }}
+              disabled={isResetting}
+              className="neo-btn px-3 py-1 bg-[#D62828] text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 hover:bg-red-700 disabled:opacity-60"
+            >
+              <Trash2 className="w-3 h-3" /> {isResetting ? 'Resetting…' : 'Reset All Data'}
             </button>
           )}
         </div>

@@ -6,7 +6,7 @@ import { useSentinel } from '@/app/providers';
 import { DashboardView } from '@/views/DashboardView';
 
 export default function DashboardPage() {
-  const { authUser, students, uploadHistory, handleDataUpload, handleClearAllData, handleDeleteUpload } = useSentinel();
+  const { authUser, students, uploadHistory, handleDataUpload, handleClearAllData, handleDeleteUpload, isResetting } = useSentinel();
   const router = useRouter();
 
   useEffect(() => {
@@ -32,6 +32,7 @@ export default function DashboardPage() {
         onDataUpload={handleDataUpload}
         onClearAllData={handleClearAllData}
         onDeleteUpload={handleDeleteUpload}
+        isResetting={isResetting}
       />
     </div>
   );

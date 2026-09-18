@@ -397,23 +397,53 @@ export function bulkUpsertStudents(students: any[]): number {
   return count;
 }
 
-export function clearAllStudents(): void {
-  // Mutate in place: every route bundle holds the same object.
-  state.students.length = 0;
-  for (const key of Object.keys(state.details)) delete state.details[key];
-  // Also clear all intervention data so re-uploading starts completely fresh.
-  state.interventions.length = 0;
-  for (const key of Object.keys(state.statuses)) delete state.statuses[key];
-  for (const key of Object.keys(state.outcomes)) delete state.outcomes[key];
-
-  // Clean pre-seeded template maps so no stale activeIntervention remains
+/**
+ * Full reset: students, their details, interventions, outcomes, the
+ * student-facing status store and the upload history all go away, and the
+ * seeded demo templates are stripped of interventions so a later re-upload can
+ * never resurrect an old "Active"/"Resolved" plan.
+ *
+ * Mutate in place: every route bundle holds a reference to these objects, so
+ * replacing them would leave other bundles serving stale data.
+ */
+export function resetAllData(): void {
+  // Remove seeded interventions from the templates FIRST. The template detail
+  // objects are shared with `state.details`, so any record still referencing
+  // them must be cleaned before the stores are emptied.
   for (const sid of Object.keys(studentDetailsMap)) {
-    delete studentDetailsMap[sid].activeIntervention;
-    studentDetailsMap[sid].interventionStatus = 'None';
+    const template = studentDetailsMap[sid];
+    delete template.activeIntervention;
+    template.interventionStatus = 'None';
   }
   for (const sid of Object.keys(studentStatusMap)) {
     delete studentStatusMap[sid];
   }
+  for (const sid of Object.keys(outcomeComparisonsMap)) {
+    delete outcomeComparisonsMap[sid];
+  }
+  for (const summary of initialStudents) {
+    summary.interventionStatus = 'None';
+  }
+
+  state.students.length = 0;
+  for (const key of Object.keys(state.details)) delete state.details[key];
+  state.interventions.length = 0;
+  for (const key of Object.keys(state.statuses)) delete state.statuses[key];
+  for (const key of Object.keys(state.outcomes)) delete state.outcomes[key];
+  state.history.length = 0;
+}
+
+/** Kept for existing callers: resetting students means resetting everything. */
+export function clearAllStudents(): void {
+  resetAllData();
+}
+
+/**
+ * True when the store holds no students at all. Used to tell "this record was
+ * wiped by a reset" apart from "this student was never uploaded".
+ */
+export function isStoreEmpty(): boolean {
+  return state.students.length === 0 && Object.keys(state.details).length === 0;
 }
 
 export function getUploadHistory(): any[] {

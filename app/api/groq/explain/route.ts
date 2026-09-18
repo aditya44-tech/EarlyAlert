@@ -1,5 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+
+// Models verified to be active on this API key. qwen3.8-27b produces the
+// richest narrative but is the one Groq rate-limits first (HTTP 429), so the
+// fast gpt-oss model acts as the stand-by.
+const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
+const FALLBACK_MODEL = 'openai/gpt-oss-20b';
+
+// When Groq rate-limits the primary model, remember it for a short window so
+// the following narratives go straight to the stand-by model instead of paying
+// for a doomed request on every single call.
+const RATE_LIMIT_COOLDOWN_MS = 60_000;
+let primaryCooldownUntil = 0;
+
+function callGroq(model: string, prompt: string, maxTokens: number) {
+  return fetch(GROQ_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: maxTokens,
+      temperature: 0.4,
+    }),
+  });
+}
+
 /**
  * Helper to build deterministic fallback explanation if Groq is unavailable
  */
@@ -120,41 +150,24 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
       return NextResponse.json({ error: 'Invalid mode. Use "explain" or "rationale".' }, { status: 400 });
     }
 
-    // Use models verified to be active and available on this Groq API key.
-    const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
-    const FALLBACK_MODEL = 'openai/gpt-oss-20b';
+    const maxTokens = mode === 'rationale' ? 80 : 220;
 
-    let groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: PRIMARY_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: mode === 'rationale' ? 80 : 220,
-        temperature: 0.4,
-      }),
-    });
+    // Skip the primary while it is cooling down from a rate-limit response.
+    const coolingDown = Date.now() < primaryCooldownUntil;
+    let model = coolingDown ? FALLBACK_MODEL : PRIMARY_MODEL;
+    let groqResponse = await callGroq(model, prompt, maxTokens);
 
-    // If the primary model fails, retry with the production fallback
+    // If the chosen model fails, retry once with the other one.
     if (!groqResponse.ok) {
       const errText = await groqResponse.text();
-      console.warn(`[Groq] Primary model "${PRIMARY_MODEL}" failed (${groqResponse.status}): ${errText}. Retrying with "${FALLBACK_MODEL}".`);
-      groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: FALLBACK_MODEL,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: mode === 'rationale' ? 80 : 220,
-          temperature: 0.4,
-        }),
-      });
+      if (groqResponse.status === 429 && model === PRIMARY_MODEL && !coolingDown) {
+        primaryCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+        console.warn(`[Groq] "${PRIMARY_MODEL}" is rate-limited (429) — using "${FALLBACK_MODEL}" for the next ${RATE_LIMIT_COOLDOWN_MS / 1000}s.`);
+      } else {
+        console.warn(`[Groq] Model "${model}" failed (${groqResponse.status}): ${errText}. Retrying with the other model.`);
+      }
+      model = model === PRIMARY_MODEL ? FALLBACK_MODEL : PRIMARY_MODEL;
+      groqResponse = await callGroq(model, prompt, maxTokens);
     }
 
     if (!groqResponse.ok) {
@@ -169,7 +182,7 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
 
     const data = await groqResponse.json();
     const text: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
-    const modelUsed: string = data?.model ?? PRIMARY_MODEL;
+    const modelUsed: string = data?.model ?? model;
 
     if (!text) {
       console.warn('[Groq] Empty response from model — using fallback.');
