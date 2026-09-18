@@ -90,7 +90,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     return null;
   };
 
-  const handleDataUpload = async (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string): Promise<{ success: boolean; updatedCount: number; skippedCount: number }> => {
+  const handleDataUpload = async (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string, overwrite?: boolean): Promise<{ success: boolean; updatedCount: number; skippedCount: number }> => {
     // The client-side detail cache is lazy — make sure we hold each affected
     // student's FULL record from the server before applying changes. Otherwise a
     // student we have never opened would be replaced by an empty stub, wiping
@@ -117,9 +117,9 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     }
 
     const newDetails = { ...detailsMap, ...preloaded };
-    const newStudents = [...students];
     let updatedCount = 0;
     let skippedCount = 0;
+    const clearedHistoryIds = new Set<string>();
 
     // Snapshot original state of each affected student BEFORE making changes
     // This allows clean revert when the upload is deleted
@@ -142,9 +142,6 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
         };
         // Mark as created by this upload (no snapshot needed — delete will remove student)
         snapshots[sid] = null;
-        if (!newStudents.find(s => s.studentId === sid)) {
-          newStudents.push({ studentId: sid, name, department: newDetails[sid].department, year: newDetails[sid].year, riskScore: 0, riskLevel: 'Low', interventionStatus: 'None' });
-        }
       }
 
       const existing = { ...newDetails[sid] };
@@ -153,6 +150,13 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
         const att = parseFloat(row.attendance);
         // If CSV has its own "week" column (new overall format), prefer that over the UI-provided label
         const effectiveWeekLabel = row.week?.trim() || weekLabel;
+        
+        if (overwrite && !clearedHistoryIds.has(sid)) {
+          existing.attendanceHistory = [];
+          existing.subjectAttendance = [];
+          clearedHistoryIds.add(sid);
+        }
+
         if (!isNaN(att)) {
           // Parse subject attendance columns from CSV (e.g., "DBMS_attendance", "CN_attendance")
           const subjectCols = Object.keys(row).filter(k => k.endsWith('_attendance'));
@@ -268,15 +272,33 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       }
 
       newDetails[sid] = existing;
-      const summaryIdx = newStudents.findIndex(s => s.studentId === sid);
-      if (summaryIdx !== -1) {
-        newStudents[summaryIdx] = { ...newStudents[summaryIdx], riskScore: existing.riskScore, riskLevel: existing.riskLevel };
-      }
       updatedCount++;
     });
 
-    setDetailsMap(newDetails);
-    setStudents(newStudents);  // update dashboard immediately
+    // Use functional state updates to avoid stale closures
+    setDetailsMap(prev => ({ ...prev, ...newDetails }));
+    setStudents(prev => {
+      const nextStudents = [...prev];
+      for (const sid of affectedIds) {
+        const detail = newDetails[sid];
+        if (!detail) continue;
+        const idx = nextStudents.findIndex(s => s.studentId === sid);
+        if (idx !== -1) {
+          nextStudents[idx] = { ...nextStudents[idx], riskScore: detail.riskScore, riskLevel: detail.riskLevel };
+        } else {
+          nextStudents.push({ 
+            studentId: detail.studentId, 
+            name: detail.name, 
+            department: detail.department, 
+            year: detail.year, 
+            riskScore: detail.riskScore, 
+            riskLevel: detail.riskLevel, 
+            interventionStatus: detail.interventionStatus || 'None' 
+          });
+        }
+      }
+      return nextStudents.sort((a, b) => b.riskScore - a.riskScore);
+    });
 
     // Server Sync (fire and forget)
     const studentsArray = Object.values(newDetails);
@@ -395,12 +417,16 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     // Register the intervention server-side first: it is the authority for the
     // baseline risk score, so the outcome store and the student record can never
     // disagree about what "before" means.
-    let baselineRiskScore = detailsMap[payload.studentId]?.riskScore;
+    // We always pass the client-side score in the payload so the server uses
+    // the EXACT score visible in the UI at assignment time, even if the server
+    // state is stale after a CSV upload (fire-and-forget sync race).
+    const clientSideScore = detailsMap[payload.studentId]?.riskScore;
+    let baselineRiskScore = clientSideScore;
     try {
       const res = await fetch('/api/interventions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, baselineRiskScore: clientSideScore })
       });
       const data = await res.json();
       if (typeof data?.baselineRiskScore === 'number') {

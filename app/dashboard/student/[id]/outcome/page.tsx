@@ -56,6 +56,7 @@ export default function MentorOutcomePage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const {
     authUser,
+    detailsMap,
     fetchStudentDetail,
     handleResolveIntervention,
     handleReopenIntervention,
@@ -85,9 +86,13 @@ export default function MentorOutcomePage({ params }: { params: Promise<{ id: st
     setLoading(true);
     let student = await fetchDetailRef.current(id, { force: true });
 
-    // One-time repair: an intervention stored without a baseline would otherwise
-    // read its "before" from the moving current score.
+    // One-time repair: an intervention stored without a baseline should be
+    // frozen to the BASELINE score recorded at assignment time.
+    // IMPORTANT: Only heal if baselineRiskScore is truly missing — never
+    // overwrite it with the current score, which would break the comparison.
     if (student?.activeIntervention && typeof student.activeIntervention.baselineRiskScore !== 'number') {
+      // We cannot determine the true baseline at this point (the data is gone).
+      // Freeze to the current score as a one-time snapshot so it stops moving.
       const healed = { ...student.activeIntervention, baselineRiskScore: student.riskScore };
       try {
         await fetch(`/api/students/${id}`, {
@@ -155,7 +160,32 @@ export default function MentorOutcomePage({ params }: { params: Promise<{ id: st
     );
   }
 
-  const outcomeData = detail ? buildOutcomeData(detail) : null;
+  // Merge server-fetched detail with the provider's up-to-date copy.
+  // After a CSV upload the provider has the freshest riskScore (updated
+  // immediately in-memory), while the server may still be stale. We keep the
+  // server's activeIntervention (which has the frozen baseline) but override
+  // riskScore, riskLevel and attendanceHistory from the provider's copy.
+  const providerDetail = detailsMap[id];
+  const mergedDetail = detail
+    ? (providerDetail
+        ? {
+            ...detail,
+            riskScore: providerDetail.riskScore,
+            riskLevel: providerDetail.riskLevel,
+            attendanceHistory: providerDetail.attendanceHistory ?? detail.attendanceHistory,
+            // Preserve the frozen baseline from whichever source has it
+            activeIntervention: detail.activeIntervention
+              ? {
+                  ...detail.activeIntervention,
+                  baselineRiskScore:
+                    detail.activeIntervention.baselineRiskScore ??
+                    providerDetail.activeIntervention?.baselineRiskScore,
+                }
+              : detail.activeIntervention,
+          }
+        : detail)
+    : null;
+  const outcomeData = mergedDetail ? buildOutcomeData(mergedDetail) : null;
 
   if (!outcomeData) {
     return (

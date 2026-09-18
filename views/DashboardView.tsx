@@ -25,7 +25,7 @@ interface DashboardViewProps {
   students: StudentSummary[];
   onSelectStudent: (studentId: string) => void;
   uploadHistory?: UploadLog[];
-  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => Promise<{ success: boolean; updatedCount: number; skippedCount: number }>;
+  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string, overwrite?: boolean) => Promise<{ success: boolean; updatedCount: number; skippedCount: number }>;
   onClearAllData?: () => void;
   onDeleteUpload?: (uploadedAt: string) => Promise<void>;
 }
@@ -51,6 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isUploadMinimized, setIsUploadMinimized] = useState(true);
+  const [overwriteHistory, setOverwriteHistory] = useState(false);
   const [viewingRawData, setViewingRawData] = useState<{ week: string, type: string, data: any[], fileName?: string } | null>(null);
 
   // Unique departments and years
@@ -161,7 +162,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           // The handler loads each affected student's full record from the server
           // before applying the upload, so this is awaited.
           setIsUploading(true);
-          onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name)
+          onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name, overwriteHistory)
             .then((res) => {
               setIsUploading(false);
               if (res.success) {
@@ -367,6 +368,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </button>
                   )}
                 </div>
+                {uploadType === 'WeeklyAttendance' && (
+                  <div className="w-full flex justify-end mt-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-neutral-600 cursor-pointer hover:text-black transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={overwriteHistory} 
+                        onChange={(e) => setOverwriteHistory(e.target.checked)}
+                        className="w-4 h-4 accent-[#D62828] cursor-pointer"
+                      />
+                      Overwrite entire attendance history (Clear old weeks)
+                    </label>
+                  </div>
+                )}
                 </div>
               </div>
 

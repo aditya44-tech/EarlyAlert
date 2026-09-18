@@ -25,7 +25,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Student ${payload.studentId} not found` }, { status: 404 });
     }
 
-    const baselineRiskScore = studentDetail.riskScore;
+    // Prefer the baseline score sent by the client: the client always has the
+    // most up-to-date score (e.g. after a CSV upload) even if the server's
+    // in-memory state hasn't been synced yet.
+    const baselineRiskScore = typeof payload.baselineRiskScore === 'number'
+      ? payload.baselineRiskScore
+      : studentDetail.riskScore;
     const record = createIntervention(payload, baselineRiskScore);
 
     return NextResponse.json({

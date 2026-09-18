@@ -107,6 +107,8 @@ export interface MentorActionPayload {
   assignedBy: string;
   startDate: string;
   status: string;
+  /** The risk score visible in the UI at the moment the intervention is assigned. Sent by the client to ensure the baseline is always accurate even if the server's in-memory state is stale after a CSV upload. */
+  baselineRiskScore?: number;
 }
 
 export interface StudentActiveIntervention {
