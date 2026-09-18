@@ -77,24 +77,39 @@ export const TrendChart: React.FC<TrendChartProps> = ({
     return weekSortKey(aLabel) - weekSortKey(bLabel);
   });
 
-  // A trend needs at least two readings. With one, a line chart draws nothing
-  // but a dot — which reads as "the graph is broken". Show the single reading
-  // as a level marker instead, and say why there is no line yet.
-  const singlePoint = sortedData.length === 1;
-  const singleValue = singlePoint ? Number(sortedData[0][yKey]) : NaN;
+  // Always pad the attendance chart to show all 4 weeks on the X-axis.
+  // Weeks with no real data get a null value so the line stops at the last
+  // real reading while all week labels remain visible.
+  const isWeeklyAttendance = xKey === 'displayWeek' || xKey === 'week';
+  const paddedData: Record<string, unknown>[] = React.useMemo(() => {
+    if (!isWeeklyAttendance) return sortedData;
+    const ALL_WEEKS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+    return ALL_WEEKS.map((weekLabel) => {
+      const existing = sortedData.find((d) => String(d[xKey]) === weekLabel);
+      return existing ?? { [xKey]: weekLabel, [yKey]: null };
+    });
+  }, [sortedData, xKey, yKey, isWeeklyAttendance]);
+
+  const displayData = isWeeklyAttendance ? paddedData : sortedData;
+
+  // A trend needs at least two readings with real values. With one, a line
+  // chart draws nothing but a dot — show a level marker and explain why.
+  const realPoints = displayData.filter((d) => d[yKey] !== null && !isNaN(Number(d[yKey])));
+  const singlePoint = realPoints.length === 1;
+  const singleValue = singlePoint ? Number(realPoints[0][yKey]) : NaN;
 
   const computedDomain: [number, number] = React.useMemo(() => {
     if (yDomain) return yDomain;
-    if (sortedData.length === 0) return [0, 100];
-    const values = sortedData.map(d => Number(d[yKey])).filter(v => !isNaN(v));
+    if (realPoints.length === 0) return [0, 100];
+    const values = realPoints.map(d => Number(d[yKey])).filter(v => !isNaN(v));
     if (values.length === 0) return [0, 100];
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
     const pad = Math.max(5, (maxVal - minVal) * 0.15);
     return [Math.max(0, Math.floor(minVal - pad)), Math.min(100, Math.ceil(maxVal + pad))];
-  }, [sortedData, yKey, yDomain]);
+  }, [realPoints, yKey, yDomain]);
 
-  if (sortedData.length === 0) {
+  if (realPoints.length === 0) {
     return (
       <div className="w-full flex items-center justify-center" style={{ height }}>
         <p className="text-xs text-neutral-400 font-bold uppercase tracking-wider">
@@ -118,7 +133,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({
       )}
       <div style={{ width: '100%', height }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={sortedData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
+          <ComposedChart data={displayData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
             <defs>
               <linearGradient id={`areaGrad-${yKey}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={lineColor} stopOpacity={0.18} />
