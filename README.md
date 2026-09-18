@@ -1,4 +1,4 @@
-# Sentinel — AI-Powered Student Dropout Prediction Platform 🎯
+# Sentinel: AI-Powered Student Dropout Prediction Platform 🎯
 
 > **Identifying at-risk students before they drop out — using deterministic scoring + AI-powered narratives.**
 
