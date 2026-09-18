@@ -6,6 +6,21 @@ import { StudentSummary, StudentDetail, UploadLog, MentorActionPayload, OutcomeC
 import { computeRiskScore, generateFallbackExplanation, RawStudentData } from '@/lib/riskEngine';
 import { buildSnapshot, planUploadRevert, affectedStudentIds } from '@/lib/uploadRevert';
 
+/** Case/whitespace-insensitive column lookup, so "Week", "WEEK" and " week " all work. */
+function getField(row: any, name: string): any {
+  if (!row || typeof row !== 'object') return undefined;
+  const key = Object.keys(row).find(k => k.trim().toLowerCase() === name.toLowerCase());
+  return key === undefined ? undefined : row[key];
+}
+
+/** Week label from an uploaded row, normalised to "Week N". Returns null when the row has none. */
+function getWeekFromRow(row: any): string | null {
+  const raw = getField(row, 'week');
+  const v = String(raw ?? '').trim();
+  if (!v) return null;
+  return /^\d+$/.test(v) ? `Week ${v}` : v; // "2" -> "Week 2"
+}
+
 interface SentinelContextType {
   authUser: AuthUser | null;
   role: 'mentor' | 'student';
@@ -181,9 +196,9 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (uploadType === 'WeeklyAttendance') {
-        const att = parseFloat(row.attendance);
+        const att = parseFloat(getField(row, 'attendance'));
         // If CSV has its own "week" column (new overall format), prefer that over the UI-provided label
-        const effectiveWeekLabel = row.week?.trim() || weekLabel;
+        const effectiveWeekLabel = getWeekFromRow(row) || weekLabel;
         
         if (overwrite && !clearedHistoryIds.has(sid)) {
           existing.attendanceHistory = [];
@@ -318,6 +333,12 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       updatedCount++;
     });
 
+    // TEMP DEBUG: remove once weekly attendance is confirmed working
+    if (uploadType === 'WeeklyAttendance') {
+      console.log('[upload] sample row:', parsedData[0]);
+      console.log('[upload] attendanceHistory after merge:', newDetails[affectedIds[0]]?.attendanceHistory);
+    }
+
     // Use functional state updates to avoid stale closures
     setDetailsMap(prev => ({ ...prev, ...newDetails }));
     setStudents(prev => {
@@ -348,7 +369,9 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     fetch('/api/students', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(studentsArray)
-    }).catch(e => console.error('Student sync failed', e));    const newLog: UploadLog = {
+    }).catch(e => console.error('Student sync failed', e));
+
+    const newLog: UploadLog = {
       uploadedAt: new Date().toISOString(),
       fileName: fileName || `dataset_${uploadType}.csv`,
       week: weekLabel || 'Initial',
