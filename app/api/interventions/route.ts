@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createIntervention, getAllInterventions, getStudentDetail } from '@/lib/db';
 import { MentorActionPayload } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/interventions: list all intervention records
 export async function GET() {
   const interventions = getAllInterventions();
