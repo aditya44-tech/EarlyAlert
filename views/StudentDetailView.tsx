@@ -309,7 +309,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               </h3>
             </div>
             <span className="text-xs font-mono font-bold px-1.5 py-0.5 bg-red-100 text-[#D62828] border border-[#0D0D0D]">
-              {student.attendanceHistory.length} Weeks
+              {student.attendanceHistory.length} {student.attendanceHistory.length === 1 ? 'Week' : 'Weeks'}
             </span>
           </div>
           <p className="text-xs text-neutral-600 mb-4 font-medium">
@@ -323,7 +323,6 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             lineColor="#D62828"
             targetThreshold={75}
             thresholdLabel="Min 75%"
-            yDomain={[40, 100]}
           />
         </div>
 

@@ -406,6 +406,10 @@ export function clearAllStudents(): void {
   // Mutate in place: every route bundle holds the same object.
   state.students.length = 0;
   for (const key of Object.keys(state.details)) delete state.details[key];
+  // Also clear all intervention data so re-uploading starts completely fresh.
+  state.interventions.length = 0;
+  for (const key of Object.keys(state.statuses)) delete state.statuses[key];
+  for (const key of Object.keys(state.outcomes)) delete state.outcomes[key];
 }
 
 export function getUploadHistory(): any[] {

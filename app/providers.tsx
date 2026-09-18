@@ -327,11 +327,17 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleClearAllData = async () => {
+    // Clear all client-side state immediately
     setStudents([]);
     setDetailsMap({});
     setUploadHistory([]);
-    await fetch('/api/students', { method: 'DELETE' });
-    await fetch('/api/history', { method: 'DELETE' });
+    // Tell the server to wipe everything — students, history, and interventions.
+    // clearAllStudents() on the server now also clears state.interventions,
+    // state.statuses and state.outcomes, so a fresh upload starts with a blank slate.
+    await Promise.allSettled([
+      fetch('/api/students', { method: 'DELETE' }),
+      fetch('/api/history', { method: 'DELETE' }),
+    ]);
   };
 
   const handleDeleteUpload = async (uploadedAt: string) => {
