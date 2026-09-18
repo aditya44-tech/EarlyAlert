@@ -250,7 +250,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             {isGroqPowered && !isAiLoading && (
               <span className="flex items-center gap-1 text-[10px] font-black bg-[#0D0D0D] text-[#F4C430] px-1.5 py-0.5 border border-[#0D0D0D]">
                 <Zap className="w-2.5 h-2.5" />
-                GROQ · llama-3.3-70b
+                GROQ · qwen-3.8-27b
               </span>
             )}
           </div>
@@ -275,7 +275,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               {isAiLoading && (
                 <div className="flex items-center gap-2 text-xs font-bold text-neutral-600 pt-1">
                   <RefreshCw className="w-3 h-3 animate-spin text-[#D62828]" />
-                  <span>Synthesizing live narrative via Groq (llama-3.3-70b)...</span>
+                  <span>Synthesizing live narrative via Groq (qwen/qwen3.8-27b)...</span>
                 </div>
               )}
             </div>
@@ -319,8 +319,18 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             Bi-weekly institutional sensor &amp; LMS participation logs.
           </p>
           <TrendChart
-            data={student.attendanceHistory as unknown as Record<string, unknown>[]}
-            xKey="week"
+            data={(student.attendanceHistory || [])
+              .slice()
+              .sort((a, b) => {
+                const aNum = parseInt((a.week || '').replace(/\D/g, ''), 10) || 0;
+                const bNum = parseInt((b.week || '').replace(/\D/g, ''), 10) || 0;
+                return aNum - bNum;
+              })
+              .map((item, idx) => ({
+                ...item,
+                displayWeek: `Week ${idx + 1}`,
+              })) as unknown as Record<string, unknown>[]}
+            xKey="displayWeek"
             yKey="percentage"
             unit="%"
             lineColor="#D62828"

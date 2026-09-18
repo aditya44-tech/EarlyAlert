@@ -44,3 +44,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+// DELETE /api/interventions: wipe all interventions
+export async function DELETE() {
+  try {
+    const { clearAllStudents } = await import('@/lib/db');
+    clearAllStudents();
+
+    const { isDbConnected } = await import('@/lib/dbConnect');
+    if (await isDbConnected()) {
+      try {
+        const { Outcome } = await import('@/lib/models');
+        await Outcome.deleteMany({});
+      } catch (err: any) {
+        console.warn("MongoDB Outcome deleteMany failed:", err.message);
+      }
+    }
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

@@ -145,6 +145,10 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       }
 
       const existing = { ...newDetails[sid] };
+      if (snapshots[sid] === null) {
+        delete existing.activeIntervention;
+        existing.interventionStatus = 'None';
+      }
 
       if (uploadType === 'WeeklyAttendance') {
         const att = parseFloat(row.attendance);
@@ -346,6 +350,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     await Promise.allSettled([
       fetch('/api/students', { method: 'DELETE' }),
       fetch('/api/history', { method: 'DELETE' }),
+      fetch('/api/interventions', { method: 'DELETE' }),
     ]);
   };
 

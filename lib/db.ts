@@ -405,6 +405,15 @@ export function clearAllStudents(): void {
   state.interventions.length = 0;
   for (const key of Object.keys(state.statuses)) delete state.statuses[key];
   for (const key of Object.keys(state.outcomes)) delete state.outcomes[key];
+
+  // Clean pre-seeded template maps so no stale activeIntervention remains
+  for (const sid of Object.keys(studentDetailsMap)) {
+    delete studentDetailsMap[sid].activeIntervention;
+    studentDetailsMap[sid].interventionStatus = 'None';
+  }
+  for (const sid of Object.keys(studentStatusMap)) {
+    delete studentStatusMap[sid];
+  }
 }
 
 export function getUploadHistory(): any[] {

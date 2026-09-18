@@ -120,9 +120,9 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
       return NextResponse.json({ error: 'Invalid mode. Use "explain" or "rationale".' }, { status: 400 });
     }
 
-    // Use stable production-tier models that are reliably available on Groq.
-    const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
-    const FALLBACK_MODEL = 'llama-3.1-8b-instant';
+    // Use models verified to be active and available on this Groq API key.
+    const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
+    const FALLBACK_MODEL = 'openai/gpt-oss-20b';
 
     let groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
