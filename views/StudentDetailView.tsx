@@ -377,7 +377,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               })
               .map((item, idx) => ({
                 ...item,
-                displayWeek: item.week || `Week ${idx + 1}`,
+                displayWeek: `Week ${idx + 1}`,
               })) as unknown as Record<string, unknown>[]}
             xKey="displayWeek"
             yKey="percentage"
