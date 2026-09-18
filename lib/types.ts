@@ -79,6 +79,8 @@ export interface StudentDetail {
   backlogSubjects?: string[];
   feeStatus?: string;
   feeOverdueDays?: number;
+  /** Assignment submission rate (0-100) driving the Low Engagement factor */
+  submissionRate?: number;
   aiExplanation: string;
   suggestedAction: string;
 }
@@ -139,11 +141,14 @@ export interface OutcomeComparisonData {
     };
     startDate: string;
   };
+  /** Risk score recorded when the intervention was assigned. Never re-derived. */
   baselineScore: number;
   currentScore: number;
   scoreDelta: number;
   outcome: 'Improving' | 'No Change' | 'Worsening';
   checkpointDate: string;
+  /** Current lifecycle state of the intervention backing this comparison */
+  status?: string;
 }
 
 export type UploadType = 'WeeklyAttendance' | 'UnitTest1' | 'UnitTest2' | 'Backlogs' | 'FeeStatus' | 'LastSemResult' | 'EndSemResult';

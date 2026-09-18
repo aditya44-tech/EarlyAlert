@@ -26,6 +26,17 @@ export function toStudentFriendlyFactor(factor: string): string {
   return STUDENT_FRIENDLY_FACTOR_MAP[factor] || factor;
 }
 
+/**
+ * Schedules may arrive as an ISO timestamp (from the date-time picker) or as a
+ * free-text slot such as "Mon 3:00 PM" (pre-seeded demo plans). Only format the
+ * former — otherwise the student sees "Invalid Date".
+ */
+function formatSchedule(value?: string | null): string {
+  if (!value) return 'Date to be confirmed';
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
 interface StudentFacingStatusViewProps {
   statusData: StudentStatusData;
   allStudents?: { studentId: string; name: string }[];
@@ -42,6 +53,9 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
   onSwitchToMentor,
 }) => {
   const intervention = statusData.activeIntervention;
+  // A plan that has been resolved (or was only ever a notification) must not be
+  // presented to the student as an active support plan.
+  const showsActivePlan = Boolean(intervention) && intervention!.status !== 'Resolved' && intervention!.status !== 'Notified';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -81,7 +95,7 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
       </div>
 
       {/* Main Student Status Card */}
-      {intervention && intervention.status !== 'Notified' ? (
+      {showsActivePlan && intervention ? (
         <div className="neo-card p-6 md:p-8 bg-white space-y-6">
           <div className="flex items-center justify-between border-b-2 border-[#0D0D0D] pb-4">
             <div>
@@ -129,9 +143,7 @@ export const StudentFacingStatusView: React.FC<StudentFacingStatusViewProps> = (
                       Counseling scheduled:
                     </h2>
                     <div className="text-base font-extrabold text-[#D62828]">
-                      {intervention.details.schedule
-                        ? new Date(String(intervention.details.schedule)).toLocaleString()
-                        : 'Date to be confirmed'}
+                      {formatSchedule(intervention.details.schedule as string | undefined)}
                       {intervention.details.counselorName ? ` with ${String(intervention.details.counselorName)}` : null}
                     </div>
                     {intervention.details.counselingType ? (

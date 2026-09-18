@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect, { isDbConnected } from '@/lib/dbConnect';
 import { Student } from '@/lib/models';
-import { getStudentDetail, updateStudentRisk, upsertStudent } from '@/lib/db';
+import { getStudentDetail, updateStudentRisk, upsertStudent, deleteStudent } from '@/lib/db';
 
 export async function GET(
   _request: NextRequest,
@@ -30,6 +30,34 @@ export async function GET(
     return NextResponse.json({ student: fallbackStudent });
   } catch (error: any) {
     console.error(`GET /api/students/[id] error:`, error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+/**
+ * Removes a student entirely. Used when an upload that created a student is
+ * deleted, so the rollback removes them instead of leaving a blank record.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    deleteStudent(id);
+
+    if (await isDbConnected()) {
+      try {
+        await Student.deleteOne({ studentId: id });
+      } catch (err: any) {
+        console.warn(`MongoDB deleteOne failed for ${id}:`, err.message);
+      }
+    }
+
+    return NextResponse.json({ success: true, studentId: id });
+  } catch (error: any) {
+    console.error(`DELETE /api/students/[id] error:`, error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

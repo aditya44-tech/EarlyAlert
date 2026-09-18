@@ -22,6 +22,7 @@ interface OutcomeComparisonViewProps {
   data: OutcomeComparisonData;
   onBack: () => void;
   onResolveIntervention?: (studentId: string) => void;
+  onReopenIntervention?: (studentId: string) => void;
 }
 
 function DetailCell({ label, value }: { label: string; value: string }) {
@@ -101,8 +102,12 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
   data,
   onBack,
   onResolveIntervention,
+  onReopenIntervention,
 }) => {
-  const [isResolved, setIsResolved] = useState(false);
+  // Optimistic local override; the persisted intervention status is the source
+  // of truth, so a resolved plan still renders as resolved after a reload.
+  const [optimisticResolved, setOptimisticResolved] = useState<boolean | null>(null);
+  const isResolved = optimisticResolved ?? data.status === 'Resolved';
 
   const isImproving = data.outcome === 'Improving';
   const isWorsening = data.outcome === 'Worsening';
@@ -119,14 +124,17 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
       );
       if (!confirmed) return;
     }
-    setIsResolved(true);
+    setOptimisticResolved(true);
     if (onResolveIntervention) {
       onResolveIntervention(data.studentId);
     }
   };
 
   const handleReopenIntervention = () => {
-    setIsResolved(false);
+    setOptimisticResolved(false);
+    if (onReopenIntervention) {
+      onReopenIntervention(data.studentId);
+    }
   };
 
   return (
@@ -323,6 +331,8 @@ export const OutcomeComparisonView: React.FC<OutcomeComparisonViewProps> = ({
               ? 'This intervention is officially flagged as resolved and archived.'
               : isAwaiting
               ? 'New attendance or test data is needed before a meaningful outcome can be determined.'
+              : isWorsening
+              ? 'Risk score has escalated since the intervention started. Review the plan before resolving or re-assigning.'
               : !hasImprovedSignificantly
               ? 'Risk score has not yet improved significantly. Consider waiting for more data before resolving.'
               : 'Significant improvement detected. You may safely mark this intervention as resolved.'}

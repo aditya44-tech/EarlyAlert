@@ -39,6 +39,11 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const [groqError, setGroqError] = useState<string | null>(null);
   const lastFetchedId = useRef<string>('');
 
+  // The lifecycle status is persisted on both the student record and the
+  // intervention itself; either one saying "Resolved" means the plan is closed.
+  const interventionResolved =
+    student.interventionStatus === 'Resolved' || student.activeIntervention?.status === 'Resolved';
+
   // Synchronize local state when a new student is loaded
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
@@ -168,16 +173,25 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
 
         {/* Action Prompt Banner */}
         {hasIntervention ? (
-          <div className="mt-5 p-4 bg-[#4ADE80] border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[4px_4px_0px_#0D0D0D]">
+          <div className={`mt-5 p-4 border-2 border-[#0D0D0D] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[4px_4px_0px_#0D0D0D] ${interventionResolved ? 'bg-[#E8F8F0]' : 'bg-[#4ADE80]'}`}>
             <div className="space-y-1">
               <span className="text-[11px] font-black uppercase tracking-wider text-[#0D0D0D] flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5" />
-                Intervention Assigned
+                {interventionResolved ? 'Intervention Resolved' : 'Intervention Assigned'}
               </span>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="text-base sm:text-lg font-black text-[#0D0D0D]">
-                  Active Intervention Plan
+                  {interventionResolved ? 'Resolved Intervention Plan' : 'Active Intervention Plan'}
                 </div>
+                {/* Lifecycle status stays visible next to the risk badge */}
+                <span
+                  id="profile-intervention-status"
+                  className={`px-2 py-0.5 border border-[#0D0D0D] text-[10px] font-black uppercase tracking-wider ${
+                    interventionResolved ? 'bg-[#2D9D5F] text-white' : 'bg-[#2563EB] text-white'
+                  }`}
+                >
+                  {interventionResolved ? 'Resolved' : 'Monitoring'}
+                </span>
                 {/* Risk badge stays visible alongside monitoring badge */}
                 <RiskBadge riskLevel={student.riskLevel} size="sm" />
               </div>
@@ -189,7 +203,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
                 onClick={() => onViewInterventions(student.studentId)}
                 className="neo-btn px-4 py-2 bg-white text-[#0D0D0D] text-xs font-black uppercase tracking-wider flex items-center gap-1.5 border-2 border-[#0D0D0D]"
               >
-                <span>Track Status</span>
+                <span>{interventionResolved ? 'View Outcome' : 'Track Status'}</span>
                 <ExternalLink className="w-4 h-4" />
               </button>
             </div>

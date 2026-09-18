@@ -1,13 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveIntervention, getOutcome } from '@/lib/db';
+import { resolveIntervention, reopenIntervention, getOutcome } from '@/lib/db';
 
-// PATCH /api/interventions/[id]/resolve: mark intervention as resolved
+/**
+ * PATCH /api/interventions/[id]
+ *
+ * `id` is the studentId in our store.
+ * Body: { status?: 'Resolved' | 'Active' }  — defaults to 'Resolved'.
+ *
+ * Resolving closes the intervention on the student record as well, so the
+ * profile, outcome page and student portal all stop showing it as active.
+ */
 export async function PATCH(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params; // id is studentId in our in-memory store
-  resolveIntervention(id);
+  const { id } = await params;
+
+  let status: 'Resolved' | 'Active' = 'Resolved';
+  try {
+    const body = await request.json();
+    if (body?.status === 'Active' || body?.status === 'Resolved') {
+      status = body.status;
+    }
+  } catch {
+    // No body sent — treat as a plain resolve
+  }
+
+  if (status === 'Active') {
+    reopenIntervention(id);
+  } else {
+    resolveIntervention(id);
+  }
+
   const outcome = getOutcome(id);
-  return NextResponse.json({ success: true, outcome });
+  return NextResponse.json({ success: true, status, outcome });
 }

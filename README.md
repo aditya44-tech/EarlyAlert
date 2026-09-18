@@ -70,6 +70,8 @@ Examples for student login:
 | **AI-Powered Narratives** | Groq AI translates raw numbers into empathetic, human-readable explanations for mentors. |
 | **Dual-Risk Explanation** | AI narrative when available, deterministic fallback text when not — the UI never breaks. |
 | **Real-Time Recomputation** | Upload a CSV → risk scores recalculate instantly across the entire student body. |
+| **Upload Revert** | Deleting an upload in Recent Uploads restores each student to the state they were in before the upload (snapshot-based), then recalculates scores. |
+| **Subject Attendance in Overall View** | Per-subject attendance is stored alongside overall attendance each week; the attendance chart shows overall attendance (subject data supports weak-subject recommendations internally). |
 | **Intervention Management** | Assign, track, and resolve interventions with full audit trail. |
 | **Outcome Tracking** | Before/after comparison shows if interventions are working (Improving/Worsening/No Change). |
 | **Dual-Layer Storage** | In-memory store (zero-config) + optional MongoDB (persistent). Works without any database. |
@@ -255,7 +257,7 @@ Sentinel uses AI **exclusively as a translation layer, never for scoring.**
 | **Charts** | Recharts |
 | **AI** | Groq API (`qwen/qwen3.8-27b` primary, `llama-3.3-70b-versatile` fallback) |
 | **Database** | MongoDB via Mongoose (optional — in-memory fallback) |
-| **Testing** | Node.js built-in test runner (31 tests) |
+| **Testing** | Node.js built-in test runner (41 tests) |
 | **Build** | `next build`, `tsc --noEmit` |
 
 ---
@@ -304,7 +306,7 @@ Open [http://localhost:3000](http://localhost:3000).
 npm test
 ```
 
-Expected output: `31 passing, 0 failing`
+Expected result this session: `41 passing, 0 skipped, 0 failing` in ~3 seconds.
 
 ---
 
@@ -392,9 +394,11 @@ sentinel/
 │   ├── models.ts                     # Mongoose schemas (incl. subject attendance)
 │   └── mockData.ts                   # 50 pre-seeded CS students
 │
-├── tests/                            # Test suite (31 tests)
-│   ├── riskEngine.test.ts            # 25 engine unit tests
-│   ├── groq.test.ts                  # 6 AI integration tests
+├── tests/                            # Test suite (41 tests)
+│   ├── riskEngine.test.ts            # Risk-engine unit tests (attendance, grades, backlogs, fees, engagement, boundaries, edge cases)
+│   ├── interventionLifecycle.test.ts # Intervention lifecycle: baseline freeze, resolve/reopen, legacy repair
+│   ├── dbRevert.test.ts              # Upload revert: snapshot restore, created-student removal, legacy cleanup
+│   ├── groq.test.ts                  # Groq prompt construction and integration tests
 │   ├── ts-register.mjs               # TypeScript test bootstrap
 │   └── ts-resolve-hooks.mjs          # Module resolution hook
 │
@@ -437,29 +441,48 @@ sentinel/
 
 ## 🧪 Testing
 
-The project includes **31 automated tests** using Node.js built-in test runner:
-
-### Risk Engine Tests (25 tests)
-- Baseline healthy student scoring
-- All 5 factor scoring tiers (attendance, grades, backlogs, fees, engagement)
-- Grade delta calculation (UT2 improvement/decline vs UT1)
-- Risk level boundaries (30/31/60/61)
-- Factor ranking and tie-breaking
-- Edge cases: empty data, negative inputs, invalid values
-- Term test name normalization (case-insensitive, whitespace-trimmed)
-- Smooth interpolation at tier boundaries (no hard cliffs)
-- UT2-only scoring against baseline tiers
-
-### Groq Integration Tests (6 tests)
-- Prompt construction accuracy
-- Live API calls (when server + API key available)
-- Malformed input handling
-- Invalid mode rejection
+The project includes an automated test suite using Node.js built-in test runner. Run it with:
 
 ```bash
 npm test          # Run all tests
 npx tsc --noEmit  # Type-check without emitting
 ```
+
+### Current Test Result
+
+```bash
+✔ ... 41 passing, 0 skipped, 0 failing
+ℹ duration_ms ~3-5s
+```
+
+### Test Categories
+
+#### Risk Engine Tests
+- Healthy baseline student scoring
+- All 5 factor scoring tiers (attendance, grades, backlogs, fees, engagement)
+- Grade delta calculation (UT2 improvement/decline vs UT1)
+- Risk level boundaries (30/31/60/61)
+- Factor ranking and tie-breaking
+- Edge cases: empty data, negative inputs, out-of-range values
+- Term test name normalization (case-insensitive, whitespace-trimmed match for `Unit Test 1` / `Unit Test 2`)
+- Smooth interpolation at tier boundaries (no hard cliffs at 60%/75%/85%)
+- UT2-only scoring against baseline tiers when UT1 is missing
+
+#### Intervention Lifecycle Tests
+- Baseline is frozen at assignment while the current score moves
+- Legacy intervention without a baseline gets frozen once, not tracked
+- Resolving closes the intervention everywhere; re-opening restores it
+- Resolving leaves no stale baseline behind
+- A student with no intervention has no outcome
+- Seeded interventions ship with a frozen baseline and a real score gap
+
+#### Groq Integration Tests
+- Prompt construction accuracy
+- Live API calls (when server + Groq API key are available)
+- Malformed input handling
+- Invalid mode rejection
+
+> **Note:** The Groq tests only run when the dev server is up **and** a valid `GROQ_API_KEY` is configured. If either is missing, those tests are skipped (not failing) and the suite still reports the other passing tests.
 
 ---
 
@@ -469,19 +492,23 @@ Sentinel ships with **50 pre-seeded Computer Science students** (S001–S050) wi
 
 | Trend Profile | Students | Description |
 |---|---|---|
-| Stable High | 16 | Consistent good attendance + grades (low risk) |
-| Stable Mid | 16 | Average performance (medium risk) |
-| Declining | 8 | Dropping attendance + grades over 4 weeks (high risk) |
-| Stable Low | 6 | Consistently poor performance (high risk) |
-| Improving | 4 | Rising attendance + grades (recovering) |
+| Stable High | 10 | Consistent good attendance + grades (low risk) |
+| Stable Mid | 9 | Average attendance + grades (medium risk) |
+| Stable Low | 5 | Consistently poor performance (high risk) |
+| Declining | 6 | Started good, dropped over 4 weeks (high risk) |
+| Was Good Then Bad | 5 | Strong early weeks, sharp drop after (high risk) |
+| Improving | 5 | Started low, trending upward (medium risk) |
+| Good Attendance, Bad Grades | 4 | Attend regularly but failing (high risk) |
+| Spike Then Drop | 3 | One good week then collapse (high risk) |
+| Recovering | 3 | Was declining, now bouncing back (medium risk) |
 
 ### Pre-Seeded Interventions (for demo)
 
 | Student | Risk Score | Intervention | Status |
 |---------|-----------|--------------|--------|
-| S006 — Kabir Kale | 78 (High) | Extra Class: DS & DBMS, Tue/Thu 4PM | Active |
-| S019 — Radhika Reddy | 72 (High) | Counseling, Mon 3PM | Active |
-| S022 — Ruchi Reddy | 70 (High) | Academic Support, Wed/Fri 5PM | Active |
+| S006 — Kabir Kale | 62 (Medium) | Extra Class: DS & DBMS, Tue/Thu 4PM | Active |
+| S019 — Radhika Reddy | 74 (High) | Counseling, Mon 3PM | Active |
+| S022 — Ruchi Reddy | 72 (High) | Academic Support, Wed/Fri 5PM | Active |
 
 ---
 
@@ -512,6 +539,12 @@ Sentinel ships with **50 pre-seeded Computer Science students** (S001–S050) wi
 | API key resilience | Expired key → silent fallback | Automatic model fallback + clear logging |
 | Subject attendance | Separate subject-wise CSVs were redundant | Single `*_overall.csv` with `*_attendance` columns |
 | Week label mismatch | UI week box could differ from CSV data | Parser now reads `week` column directly from CSV row |
+| Reset-after-revert | Deleting an upload left stale data and drifted scores | Uploads snapshot each student before applying changes; delete restores the snapshot and recalculates scores
+| Score drift after revert | `submissionRate` cleared after revert, recomputing the engagement factor incorrectly | `submissionRate` is now persisted on the student and used by both upload and revert paths
+| Intervention baseline | On assignment, the "before" score could be the current score (missing baseline → fake 0-vs-current comparison) | Baseline is recorded once on assignment and never moved; outcome page uses the frozen baseline
+| Resolve status mismatch | Clicking Mark as Resolved only flipped a summary flag, leaving the outcome page and student portal showing "Monitoring in Progress" | Resolving now flips status in every store (summary, detail, intervention record, outcome, student-facing) and the outcome page re-reads the student after the mutation
+| Outcome page refresh | Outcome page could render the pre-click `status` and miss the change | Outcome page re-fetches the student detail after resolve/reopen when the intervention status actually changed
+| Subject-wise upload | Separate overall and subject-wise upload buttons were redundant after the merge | Single attendance upload now accepts overall + per-subject `*_attendance` columns in one CSV
 | Hydration warning | Bitdefender extension injected `bis_skin_checked` | `suppressHydrationWarning` on `<html>` and `<body>` |
 
 ## 🤖 AI Usage Disclosure

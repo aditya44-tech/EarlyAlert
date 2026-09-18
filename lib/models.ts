@@ -44,6 +44,7 @@ const StudentSchema = new mongoose.Schema({
   backlogSubjects: [{ type: String }],
   feeStatus: { type: String },
   feeOverdueDays: { type: Number },
+  submissionRate: { type: Number },
   contributingFactors: [{
     factor: String,
     points: Number,

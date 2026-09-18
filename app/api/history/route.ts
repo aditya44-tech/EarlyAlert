@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect, { isDbConnected } from '@/lib/dbConnect';
-import { UploadHistory } from '@/lib/models';
-import { getUploadHistory, addUploadHistory, deleteUploadHistory } from '@/lib/db';
+import { UploadHistory, Student } from '@/lib/models';
+import { getUploadHistory, addUploadHistory, deleteUploadHistory, getUploadRecord, revertUpload } from '@/lib/db';
 
 export async function GET() {
   try {
@@ -48,10 +48,49 @@ export async function DELETE(req: Request) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     const uploadedAt = searchParams.get('uploadedAt');
+    const dbConnected = await isDbConnected();
+
+    let record: any = getUploadRecord({ id: id || undefined, uploadedAt: uploadedAt || undefined });
+
+    // The log may only exist in MongoDB (e.g. after a server restart)
+    if (!record && dbConnected && (id || uploadedAt)) {
+      try {
+        record = await UploadHistory.findOne(id ? { id } : { uploadedAt }).lean();
+      } catch (err: any) {
+        console.warn("MongoDB history lookup failed:", err.message);
+      }
+    }
+
+    let revertedStudentIds: string[] = [];
+    let removedStudentIds: string[] = [];
+
+    if (record) {
+      // Roll the students back to their pre-upload state (authoritative, server-side)
+      const result = revertUpload(record);
+      revertedStudentIds = result.revertedStudents.map(s => s.studentId);
+      removedStudentIds = result.removedStudentIds;
+
+      if (dbConnected) {
+        try {
+          for (const student of result.revertedStudents) {
+            await Student.findOneAndUpdate(
+              { studentId: student.studentId },
+              { $set: student },
+              { upsert: true }
+            );
+          }
+          if (removedStudentIds.length > 0) {
+            await Student.deleteMany({ studentId: { $in: removedStudentIds } });
+          }
+        } catch (err: any) {
+          console.warn("MongoDB student revert failed:", err.message);
+        }
+      }
+    }
 
     deleteUploadHistory(id || undefined, uploadedAt || undefined);
 
-    if (await isDbConnected()) {
+    if (dbConnected) {
       try {
         if (id) {
           await UploadHistory.deleteOne({ id });
@@ -65,7 +104,7 @@ export async function DELETE(req: Request) {
       }
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, revertedStudentIds, removedStudentIds });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -154,16 +154,25 @@ sentinel/
 ### Upload Delete → Revert → Dashboard
 
 ```
-1. Mentor clicks delete on upload history entry
+1. Mentor clicks Delete on an entry in Recent Uploads (Grouped by Week)
 2. handleDeleteUpload() in providers.tsx:
-   a. Finds upload log with snapshot data
-   b. For each student in rawData:
-      - If snapshot exists → restore all fields from snapshot
-      - If no snapshot (student created by upload) → remove student
-   c. Recalculates risk scores from restored data
-   d. Syncs to server
-3. Dashboard re-renders with original data
+   a. Finds the upload log holding the pre-upload snapshots
+   b. Loads any affected student it does not already hold from /api/students/[id]
+   c. planUploadRevert() (lib/uploadRevert.ts — shared with the API route):
+      - snapshot exists  → restore every field (attendance, grades, backlogs, fees, …)
+      - snapshot is null → the upload created the student → remove them
+      - no snapshot     → legacy upload, strip only the entries that upload added
+   d. Recalculates risk score / factors / suggested action for each student
+   e. POSTs the restored records to /api/students (and DELETEs created students)
+   f. DELETEs the log from /api/history
+   g. Clears the client detail cache
+3. Dashboard, student detail, and outcome pages all re-read the restored data
 ```
+
+The revert planner is one shared pure function (`lib/uploadRevert.ts`) used by
+the browser **and** by `DELETE /api/history`, so both layers agree on what the
+pre-upload state was. The client performs the write through `/api/students`
+because that is the same store the dashboard reads back from.
 
 ---
 
@@ -180,11 +189,40 @@ sentinel/
 
 ---
 
-## 8. Testing
+## 8. Intervention Lifecycle
 
-**31 tests total:**
-- 28 risk engine unit tests (all passing)
-- 6 Groq integration tests (5 skipped without dev server, 1 unit test passing)
+```
+1. Mentor assigns an intervention from the student profile
+2. POST /api/interventions records the baseline risk score SERVER-SIDE
+   (the value at the moment of assignment) and creates the intervention record
+3. The student record stores activeIntervention = { type, details, status,
+   assignedDate, baselineRiskScore }
+4. The dashboard / profile / outcome page read that stored baseline
+5. New attendance or test data only ever moves the CURRENT score — the baseline
+   is immutable for the life of the intervention
+6. MARK AS RESOLVED flips status to 'Resolved' on the student summary, the
+   student record, the intervention itself and the cached outcome, so the
+   outcome page, the profile chip and the student portal all close together
+```
+
+Rules that keep "before" honest:
+
+| Situation | Behaviour |
+|---|---|
+| Baseline recorded at assignment | Used as-is, never recalculated |
+| Legacy record with no baseline | Current score frozen into it **once** (`ensureBaseline`), then fixed |
+| No intervention at all | `/api/outcomes/[id]` returns 404 — no fabricated comparison |
+| Data changed after assignment | `currentScore` moves, `baselineScore` does not |
+
+---
+
+## 9. Testing
+
+**41 tests total:**
+- 26 risk engine unit tests
+- 6 Groq integration tests (live — skipped only when the dev server is down)
+- 4 upload-revert tests
+- 6 intervention lifecycle tests (frozen baseline, legacy repair, resolve/reopen)
 
 **Key test categories:**
 - All 5 scoring factors (attendance, grades, backlogs, fees, engagement)
@@ -193,6 +231,8 @@ sentinel/
 - Name normalization (case-insensitive, whitespace-trimmed)
 - UT2-only baseline scoring
 - Smooth interpolation at tier boundaries
+- Upload revert (snapshot restore, created students, legacy logs)
+- Intervention baseline freeze + resolve/reopen
 - Edge cases (empty data, negative inputs, invalid values)
 
 ---

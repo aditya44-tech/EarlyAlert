@@ -9,13 +9,17 @@
  * AI explanations generated at runtime via Groq (with fallback).
  */
 
-import {
+import type {
   StudentSummary,
   StudentDetail,
   StudentStatusData,
   OutcomeComparisonData,
 } from './types';
-import { computeRiskScore, RawStudentData, generateFallbackExplanation } from './riskEngine';
+import {
+  computeRiskScore,
+  generateFallbackExplanation,
+  type RawStudentData,
+} from './riskEngine';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trend profiles describe the 4-week trajectory
@@ -350,6 +354,7 @@ function buildStudentData() {
       backlogSubjects: bl.subjects,
       feeOverdueDays: overdueDays,
       feeStatus: overdueDays > 0 ? 'Overdue' : 'Paid',
+      submissionRate,
       aiExplanation: explanation,
       suggestedAction: result.suggestedAction,
     };
@@ -368,6 +373,11 @@ export const studentDetailsMap: Record<string, StudentDetail> = detailsMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pre-seeded intervention demos
+//
+// `baselineScore` is the risk score recorded at the moment the intervention was
+// assigned. It is the ONLY source of "before" on the Outcome Comparison page —
+// it must never be derived from the current score, otherwise the baseline would
+// drift every time fresh attendance/grade data arrives.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const studentStatusMap: Record<string, StudentStatusData> = {
@@ -394,6 +404,39 @@ export const studentStatusMap: Record<string, StudentStatusData> = {
   },
 };
 
+/**
+ * Risk score each seeded intervention recorded when it was assigned.
+ * Deliberately above the students' current scores, so the demo shows a real
+ * before/after gap (the intervention was opened while the student was worse).
+ */
+export const seededBaselineScores: Record<string, number> = {
+  S006: 84,
+  S019: 88,
+  S022: 74,
+};
+
+// Attach the seeded interventions to the student records themselves. Without
+// this the mentor dashboard, the student profile and the outcome page had no
+// idea these interventions existed (they only lived in studentStatusMap).
+for (const [sid, statusEntry] of Object.entries(studentStatusMap)) {
+  const intervention = statusEntry.activeIntervention;
+  if (!intervention) continue;
+
+  const detail = studentDetailsMap[sid];
+  if (!detail) continue;
+
+  const status = intervention.status as NonNullable<StudentDetail['interventionStatus']>;
+
+  detail.activeIntervention = {
+    ...intervention,
+    baselineRiskScore: seededBaselineScores[sid] ?? detail.riskScore,
+  };
+  detail.interventionStatus = status;
+
+  const summary = initialStudents.find(s => s.studentId === sid);
+  if (summary) summary.interventionStatus = status;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pre-seeded outcome comparisons
 // ─────────────────────────────────────────────────────────────────────────────
@@ -402,22 +445,25 @@ export const outcomeComparisonsMap: Record<string, OutcomeComparisonData> = {
   S006: {
     studentId: 'S006', name: 'Kabir Kale',
     intervention: { type: 'Extra Class', details: { subject: 'Data Structures & DBMS', schedule: 'Tue/Thu 4:00 PM', instructor: 'Dr. Mehta' }, startDate: '2026-09-02' },
-    baselineScore: detailsMap['S006']?.riskScore ?? 78,
-    currentScore: Math.max(38, (detailsMap['S006']?.riskScore ?? 78) - 34),
-    scoreDelta: -34, outcome: 'Improving', checkpointDate: '2026-09-15',
+    baselineScore: seededBaselineScores.S006,
+    currentScore: detailsMap['S006']?.riskScore ?? 62,
+    scoreDelta: (detailsMap['S006']?.riskScore ?? 62) - seededBaselineScores.S006,
+    outcome: 'Improving', checkpointDate: '2026-09-15', status: 'Active',
   },
   S019: {
     studentId: 'S019', name: 'Radhika Reddy',
     intervention: { type: 'Counseling', details: { schedule: 'Mon 3:00 PM', instructor: 'Counselor Priya' }, startDate: '2026-09-05' },
-    baselineScore: detailsMap['S019']?.riskScore ?? 72,
-    currentScore: Math.max(45, (detailsMap['S019']?.riskScore ?? 72) - 18),
-    scoreDelta: -18, outcome: 'Improving', checkpointDate: '2026-09-15',
+    baselineScore: seededBaselineScores.S019,
+    currentScore: detailsMap['S019']?.riskScore ?? 74,
+    scoreDelta: (detailsMap['S019']?.riskScore ?? 74) - seededBaselineScores.S019,
+    outcome: 'Improving', checkpointDate: '2026-09-15', status: 'Active',
   },
   S022: {
     studentId: 'S022', name: 'Ruchi Reddy',
     intervention: { type: 'Academic Support', details: { subject: 'DS, Computational Math, DBMS', schedule: 'Wed/Fri 5:00 PM' }, startDate: '2026-09-03' },
-    baselineScore: detailsMap['S022']?.riskScore ?? 70,
-    currentScore: detailsMap['S022']?.riskScore ?? 70,
-    scoreDelta: 0, outcome: 'No Change', checkpointDate: '2026-09-15',
+    baselineScore: seededBaselineScores.S022,
+    currentScore: detailsMap['S022']?.riskScore ?? 72,
+    scoreDelta: (detailsMap['S022']?.riskScore ?? 72) - seededBaselineScores.S022,
+    outcome: 'No Change', checkpointDate: '2026-09-15', status: 'Active',
   },
 };

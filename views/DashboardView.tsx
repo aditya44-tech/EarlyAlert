@@ -25,9 +25,9 @@ interface DashboardViewProps {
   students: StudentSummary[];
   onSelectStudent: (studentId: string) => void;
   uploadHistory?: UploadLog[];
-  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
+  onDataUpload?: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => Promise<{ success: boolean; updatedCount: number; skippedCount: number }>;
   onClearAllData?: () => void;
-  onDeleteUpload?: (uploadedAt: string) => void;
+  onDeleteUpload?: (uploadedAt: string) => Promise<void>;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -158,18 +158,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }
 
         if (onDataUpload) {
-          const res = onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name);
-          if (res.success) {
-            setUploadMessage({ type: 'success', text: `Upload successful! ${res.updatedCount} records updated, ${res.skippedCount} skipped.` });
-            setUploadedFile(null);
-            // Suggest next week if it uses week labels
-            if (requiresWeek) {
-              const currentWeekMatch = weekLabel.match(/\d+/);
-              if (currentWeekMatch) {
-                setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
+          // The handler loads each affected student's full record from the server
+          // before applying the upload, so this is awaited.
+          setIsUploading(true);
+          onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name)
+            .then((res) => {
+              setIsUploading(false);
+              if (res.success) {
+                setUploadMessage({ type: 'success', text: `Upload successful! ${res.updatedCount} records updated, ${res.skippedCount} skipped.` });
+                setUploadedFile(null);
+                // Suggest next week if it uses week labels
+                if (requiresWeek) {
+                  const currentWeekMatch = weekLabel.match(/\d+/);
+                  if (currentWeekMatch) {
+                    setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
+                  }
+                }
               }
-            }
-          }
+            })
+            .catch((err) => {
+              setIsUploading(false);
+              setUploadMessage({ type: 'error', text: `Upload failed: ${err?.message || 'unknown error'}` });
+            });
         }
       },
       error: (error: Error) => {

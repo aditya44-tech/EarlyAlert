@@ -8,17 +8,15 @@
  * For the hackathon demo, in-memory is sufficient and zero-config.
  */
 
-import { StudentSummary, StudentDetail, StudentStatusData, OutcomeComparisonData, MentorActionPayload } from './types';
-import { initialStudents, studentDetailsMap, studentStatusMap, outcomeComparisonsMap } from './mockData';
+import type { StudentSummary, StudentDetail, StudentStatusData, OutcomeComparisonData, MentorActionPayload, UploadLog } from './types';
+import { initialStudents, studentDetailsMap, studentStatusMap, outcomeComparisonsMap, seededBaselineScores } from './mockData';
+import { planUploadRevert } from './uploadRevert';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-memory store (persists for the lifetime of the Next.js server process)
 // ─────────────────────────────────────────────────────────────────────────────
 
-let studentsStore: StudentSummary[] = [...initialStudents];
-let detailsStore: Record<string, StudentDetail> = { ...studentDetailsMap };
-let interventionStatusStore: Record<string, StudentStatusData> = { ...studentStatusMap };
-let outcomeStore: Record<string, OutcomeComparisonData> = { ...outcomeComparisonsMap };
+// The actual store lives on globalThis — see "Shared store" below.
 
 // Intervention log (list of all assigned interventions)
 interface InterventionRecord {
@@ -34,7 +32,7 @@ interface InterventionRecord {
   createdAt: string;
 }
 
-let interventionsLog: InterventionRecord[] = [
+const INITIAL_INTERVENTIONS: InterventionRecord[] = [
   // Pre-seeded demo interventions matching mockData
   {
     id: 'INT-S006-001',
@@ -44,7 +42,7 @@ let interventionsLog: InterventionRecord[] = [
     notes: 'Student has 3 backlogs and declining attendance: extra class for core subjects.',
     assignedBy: 'mentor-demo',
     startDate: '2026-09-02',
-    baselineRiskScore: detailsStore['S006']?.riskScore ?? 78,
+    baselineRiskScore: seededBaselineScores.S006,
     status: 'Active',
     createdAt: '2026-09-02T09:00:00.000Z',
   },
@@ -56,44 +54,92 @@ let interventionsLog: InterventionRecord[] = [
     notes: 'Rapid attendance decline over 4 weeks. Financial stress likely contributing.',
     assignedBy: 'mentor-demo',
     startDate: '2026-09-05',
-    baselineRiskScore: detailsStore['S019']?.riskScore ?? 72,
+    baselineRiskScore: seededBaselineScores.S019,
     status: 'Active',
     createdAt: '2026-09-05T10:00:00.000Z',
   },
+  {
+    id: 'INT-S022-001',
+    studentId: 'S022',
+    type: 'Academic Support',
+    details: { subject: 'DS, Computational Math, DBMS', schedule: 'Wed/Fri 5:00 PM' },
+    notes: 'Academic support plan for repeated backlog subjects.',
+    assignedBy: 'mentor-demo',
+    startDate: '2026-09-03',
+    baselineRiskScore: seededBaselineScores.S022,
+    status: 'Active',
+    createdAt: '2026-09-03T11:00:00.000Z',
+  },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared store
+//
+// Next.js evaluates this module more than once: once per route bundle, and
+// again on every hot reload. Keeping the state on globalThis means the students,
+// interventions, outcomes and history routes all read and write the *same*
+// objects, so a change made through one endpoint (e.g. resolving an
+// intervention) is immediately visible through the others instead of sitting in
+// a private copy. It also survives a hot reload.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DbState {
+  students: StudentSummary[];
+  details: Record<string, StudentDetail>;
+  statuses: Record<string, StudentStatusData>;
+  outcomes: Record<string, OutcomeComparisonData>;
+  interventions: InterventionRecord[];
+  history: any[];
+}
+
+const globalStore = globalThis as unknown as { __sentinelDb?: DbState };
+
+const state: DbState = globalStore.__sentinelDb ?? (globalStore.__sentinelDb = {
+  students: [...initialStudents],
+  details: { ...studentDetailsMap },
+  statuses: { ...studentStatusMap },
+  outcomes: { ...outcomeComparisonsMap },
+  interventions: [],
+  history: [],
+});
+
+// Seed the demo intervention log once, when the shared store is first created.
+if (state.interventions.length === 0) {
+  state.interventions.push(...INITIAL_INTERVENTIONS);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB API
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getAllStudents(): StudentSummary[] {
-  return studentsStore;
+  return state.students;
 }
 
 export function getStudentDetail(studentId: string): StudentDetail | null {
-  return detailsStore[studentId] ?? null;
+  return state.details[studentId] ?? null;
 }
 
 export function updateStudentRisk(studentId: string, update: Partial<StudentDetail>): void {
-  if (detailsStore[studentId]) {
-    detailsStore[studentId] = { ...detailsStore[studentId], ...update };
+  if (state.details[studentId]) {
+    state.details[studentId] = { ...state.details[studentId], ...update };
   }
-  const idx = studentsStore.findIndex(s => s.studentId === studentId);
+  const idx = state.students.findIndex(s => s.studentId === studentId);
   if (idx !== -1) {
-    studentsStore[idx] = {
-      ...studentsStore[idx],
-      riskScore: update.riskScore ?? studentsStore[idx].riskScore,
-      riskLevel: update.riskLevel ?? studentsStore[idx].riskLevel,
+    state.students[idx] = {
+      ...state.students[idx],
+      riskScore: update.riskScore ?? state.students[idx].riskScore,
+      riskLevel: update.riskLevel ?? state.students[idx].riskLevel,
     };
   }
 }
 
 export function getIntervention(studentId: string): StudentStatusData | null {
-  return interventionStatusStore[studentId] ?? null;
+  return state.statuses[studentId] ?? null;
 }
 
 export function getAllInterventions(): InterventionRecord[] {
-  return interventionsLog;
+  return state.interventions;
 }
 
 export function createIntervention(payload: MentorActionPayload, baselineRiskScore: number): InterventionRecord {
@@ -110,27 +156,38 @@ export function createIntervention(payload: MentorActionPayload, baselineRiskSco
     status: 'Active',
     createdAt: new Date().toISOString(),
   };
-  interventionsLog.push(record);
+  state.interventions.push(record);
 
   // Update student summary status
-  const idx = studentsStore.findIndex(s => s.studentId === payload.studentId);
-  if (idx !== -1) studentsStore[idx].interventionStatus = 'Active';
+  const idx = state.students.findIndex(s => s.studentId === payload.studentId);
+  if (idx !== -1) state.students[idx].interventionStatus = 'Active';
+
+  const detail = state.details[payload.studentId];
+
+  // The live intervention lives on the student record itself, with the baseline
+  // frozen at assignment time. This is what the profile and outcome pages read.
+  const activeIntervention = {
+    type: payload.type,
+    details: payload.details,
+    status: 'Active',
+    assignedDate: payload.startDate,
+    baselineRiskScore,
+  };
+
+  if (detail) {
+    detail.activeIntervention = activeIntervention;
+    detail.interventionStatus = 'Active';
+  }
 
   // Update intervention status store (for student view)
-  const detail = detailsStore[payload.studentId];
-  interventionStatusStore[payload.studentId] = {
+  state.statuses[payload.studentId] = {
     studentId: payload.studentId,
     name: detail?.name ?? '',
-    activeIntervention: {
-      type: payload.type,
-      details: payload.details,
-      status: 'Active',
-      assignedDate: payload.startDate,
-    },
+    activeIntervention,
   };
 
   // Store only the immutable baseline: current score will be recalculated at read time
-  outcomeStore[payload.studentId] = {
+  state.outcomes[payload.studentId] = {
     studentId: payload.studentId,
     name: detail?.name ?? '',
     intervention: { type: payload.type, details: payload.details, startDate: payload.startDate },
@@ -139,56 +196,125 @@ export function createIntervention(payload: MentorActionPayload, baselineRiskSco
     scoreDelta: 0,
     outcome: 'No Change',
     checkpointDate: payload.startDate,
+    status: 'Active',
   };
 
   return record;
 }
 
-export function resolveIntervention(studentId: string): void {
-  const idx = studentsStore.findIndex(s => s.studentId === studentId);
-  if (idx !== -1) studentsStore[idx].interventionStatus = 'Resolved';
+/**
+ * Returns the risk score recorded when the intervention was assigned.
+ *
+ * The baseline is written once, at assignment. Records that predate that (legacy
+ * in-memory or Mongo documents) get the CURRENT score frozen in exactly once, so
+ * "before" stops moving instead of silently tracking the current score forever.
+ */
+export function ensureBaseline(studentId: string): number | null {
+  const detail = state.details[studentId];
+  const statusEntry = state.statuses[studentId];
+  const intervention = detail?.activeIntervention ?? statusEntry?.activeIntervention ?? null;
+  if (!intervention) return null;
 
-  const intervention = interventionStatusStore[studentId];
-  if (intervention?.activeIntervention) {
-    intervention.activeIntervention.status = 'Resolved';
+  if (typeof intervention.baselineRiskScore === 'number') {
+    return intervention.baselineRiskScore;
   }
 
-  const log = interventionsLog.find(i => i.studentId === studentId && i.status === 'Active');
+  const baseline = detail?.riskScore ?? 0;
+  intervention.baselineRiskScore = baseline;
+
+  if (statusEntry?.activeIntervention && statusEntry.activeIntervention !== intervention) {
+    statusEntry.activeIntervention.baselineRiskScore = baseline;
+  }
+
+  const storedOutcome = state.outcomes[studentId];
+  if (storedOutcome) storedOutcome.baselineScore = baseline;
+
+  return baseline;
+}
+
+export function resolveIntervention(studentId: string): void {
+  setInterventionStatus(studentId, 'Resolved');
+
+  const log = state.interventions.find(i => i.studentId === studentId && i.status === 'Active');
   if (log) log.status = 'Resolved';
 }
 
+export function reopenIntervention(studentId: string): void {
+  setInterventionStatus(studentId, 'Active');
+
+  const log = [...state.interventions].reverse().find(i => i.studentId === studentId);
+  if (log) log.status = 'Active';
+}
+
+/**
+ * Flip the intervention lifecycle state on every place it is stored: the student
+ * summary, the full student record (including `activeIntervention`), the
+ * student-facing status store and the cached outcome.
+ */
+function setInterventionStatus(studentId: string, status: 'Active' | 'Resolved'): void {
+  const idx = state.students.findIndex(s => s.studentId === studentId);
+  if (idx !== -1) state.students[idx].interventionStatus = status;
+
+  const detail = state.details[studentId];
+  if (detail) {
+    detail.interventionStatus = status;
+    if (detail.activeIntervention) {
+      detail.activeIntervention = { ...detail.activeIntervention, status };
+    }
+  }
+
+  const statusEntry = state.statuses[studentId];
+  if (statusEntry?.activeIntervention) {
+    statusEntry.activeIntervention.status = status;
+  }
+
+  const storedOutcome = state.outcomes[studentId];
+  if (storedOutcome) storedOutcome.status = status;
+}
+
 export function getOutcome(studentId: string): OutcomeComparisonData | null {
-  let stored = outcomeStore[studentId];
+  const studentDetail = state.details[studentId];
+  const statusEntry = state.statuses[studentId];
 
-  // Fallback: synthesize from interventionStatusStore if no outcome record exists
-  // (handles students whose intervention was set via PATCH before the POST fix,
-  //  or pre-seeded via studentStatusMap without a matching outcomeComparisonsMap entry)
+  // The baseline is authoritative and immutable — it is never re-derived from
+  // the current score. No intervention, no comparison.
+  const baselineScore = ensureBaseline(studentId);
+  if (baselineScore === null) return null;
+
+  let stored = state.outcomes[studentId];
+
+  // Synthesize a record for interventions that were stored without one
+  // (legacy records, or pre-seeded via studentStatusMap).
   if (!stored) {
-    const statusEntry = interventionStatusStore[studentId];
-    const detail = detailsStore[studentId];
-    if (!statusEntry?.activeIntervention || !detail) return null;
+    const intervention = studentDetail?.activeIntervention ?? statusEntry?.activeIntervention;
+    if (!intervention) return null;
 
-    const baselineScore = statusEntry.activeIntervention.baselineRiskScore ?? detail.riskScore; // use stored baseline, or current score as last resort
     stored = {
       studentId,
-      name: detail.name,
+      name: studentDetail?.name ?? statusEntry?.name ?? studentId,
       intervention: {
-        type: statusEntry.activeIntervention.type,
-        details: statusEntry.activeIntervention.details,
-        startDate: statusEntry.activeIntervention.assignedDate,
+        type: intervention.type,
+        details: intervention.details,
+        startDate: intervention.assignedDate,
       },
       baselineScore,
       currentScore: baselineScore,
       scoreDelta: 0,
       outcome: 'No Change',
-      checkpointDate: statusEntry.activeIntervention.assignedDate,
+      checkpointDate: intervention.assignedDate,
+      status: intervention.status,
     };
   }
 
+  const status =
+    studentDetail?.activeIntervention?.status ??
+    statusEntry?.activeIntervention?.status ??
+    stored.status ??
+    'Active';
+
   // Recalculate current score live from the latest student data
-  const studentDetail = detailsStore[studentId];
-  const currentScore = studentDetail?.riskScore ?? stored.baselineScore;
-  const scoreDelta = currentScore - stored.baselineScore;
+  const currentScore = studentDetail?.riskScore ?? baselineScore;
+  const scoreDelta = currentScore - baselineScore;
 
   let outcome: 'Improving' | 'No Change' | 'Worsening';
   if (scoreDelta < -2) outcome = 'Improving';
@@ -219,10 +345,12 @@ export function getOutcome(studentId: string): OutcomeComparisonData | null {
 
   return {
     ...stored,
+    baselineScore,
     currentScore,
     scoreDelta,
     outcome,
     checkpointDate,
+    status,
   };
 }
 
@@ -241,8 +369,8 @@ export function upsertStudent(student: any): void {
   const sid = student.studentId;
   if (!sid) return;
 
-  const existing = detailsStore[sid] || {};
-  detailsStore[sid] = {
+  const existing = state.details[sid] || {};
+  state.details[sid] = {
     ...existing,
     ...student,
   };
@@ -257,11 +385,11 @@ export function upsertStudent(student: any): void {
     interventionStatus: student.interventionStatus ?? existing.interventionStatus ?? 'None',
   };
 
-  const idx = studentsStore.findIndex(s => s.studentId === sid);
+  const idx = state.students.findIndex(s => s.studentId === sid);
   if (idx !== -1) {
-    studentsStore[idx] = summaryItem;
+    state.students[idx] = summaryItem;
   } else {
-    studentsStore.push(summaryItem);
+    state.students.push(summaryItem);
   }
 }
 
@@ -275,14 +403,20 @@ export function bulkUpsertStudents(students: any[]): number {
 }
 
 export function clearAllStudents(): void {
-  studentsStore = [];
-  detailsStore = {};
+  // Mutate in place: every route bundle holds the same object.
+  state.students.length = 0;
+  for (const key of Object.keys(state.details)) delete state.details[key];
 }
 
-let uploadHistoryStore: any[] = [];
-
 export function getUploadHistory(): any[] {
-  return uploadHistoryStore;
+  return state.history;
+}
+
+/** Remove history entries in place, so all route bundles see the same list. */
+function removeHistoryWhere(predicate: (record: any) => boolean): void {
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    if (predicate(state.history[i])) state.history.splice(i, 1);
+  }
 }
 
 export function addUploadHistory(record: any): any {
@@ -291,17 +425,72 @@ export function addUploadHistory(record: any): any {
     createdAt: new Date().toISOString(),
     ...record,
   };
-  uploadHistoryStore = [newRec, ...uploadHistoryStore];
+  state.history.unshift(newRec);
   return newRec;
+}
+
+export function getUploadRecord(opts: { id?: string; uploadedAt?: string }): UploadLog | null {
+  if (opts.id) return state.history.find(u => u.id === opts.id) ?? null;
+  if (opts.uploadedAt) return state.history.find(u => u.uploadedAt === opts.uploadedAt) ?? null;
+  return null;
 }
 
 export function deleteUploadHistory(id?: string, uploadedAt?: string): void {
   if (id) {
-    uploadHistoryStore = uploadHistoryStore.filter(u => u.id !== id);
+    removeHistoryWhere(u => u.id === id);
   } else if (uploadedAt) {
-    uploadHistoryStore = uploadHistoryStore.filter(u => u.uploadedAt !== uploadedAt);
+    removeHistoryWhere(u => u.uploadedAt === uploadedAt);
   } else {
-    uploadHistoryStore = [];
+    state.history.length = 0;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload revert
+//
+// Deleting an upload log must roll the student data back to exactly the state
+// it was in before that upload touched it. The server (not the client) owns the
+// full student records, so the revert happens here and is authoritative.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RevertResult {
+  revertedStudents: StudentDetail[];
+  removedStudentIds: string[];
+}
+
+/** Remove a student from both stores (used when an upload that created them is deleted). */
+export function deleteStudent(studentId: string): boolean {
+  const existed = Boolean(state.details[studentId]);
+  delete state.details[studentId];
+  const idx = state.students.findIndex(s => s.studentId === studentId);
+  if (idx !== -1) state.students.splice(idx, 1);
+  return existed || idx !== -1;
+}
+
+/**
+ * Roll student data back to its pre-upload state using the log's snapshots.
+ * Students that the upload created are removed entirely.
+ */
+export function revertUpload(record: UploadLog | any): RevertResult {
+  const plan = planUploadRevert(record, state.details);
+
+  for (const sid of plan.removedIds) {
+    deleteStudent(sid);
+  }
+
+  for (const student of plan.updated) {
+    state.details[student.studentId] = student;
+
+    const idx = state.students.findIndex(s => s.studentId === student.studentId);
+    if (idx !== -1) {
+      state.students[idx] = {
+        ...state.students[idx],
+        riskScore: student.riskScore,
+        riskLevel: student.riskLevel,
+      };
+    }
+  }
+
+  return { revertedStudents: plan.updated, removedStudentIds: plan.removedIds };
 }
 

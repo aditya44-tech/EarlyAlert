@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useReducer } from 'react';
 import { useRouter } from 'next/navigation';
 import { use } from 'react';
 import { useSentinel } from '@/app/providers';
@@ -12,7 +12,10 @@ function buildOutcomeData(detail: StudentDetail): OutcomeComparisonData | null {
 
   const intervention = detail.activeIntervention;
 
-  // Baseline: stored when intervention was assigned (if available), else current score
+  // The baseline is the risk score recorded when the intervention was assigned.
+  // If a legacy record never stored one, the loader freezes the current score
+  // into it exactly once (see the effect below), so from then on "before" is
+  // fixed — it never tracks the current score.
   const baselineScore: number = intervention.baselineRiskScore ?? detail.riskScore;
   const currentScore = detail.riskScore;
   const scoreDelta = currentScore - baselineScore;
@@ -45,12 +48,18 @@ function buildOutcomeData(detail: StudentDetail): OutcomeComparisonData | null {
     scoreDelta,
     outcome,
     checkpointDate,
+    status: intervention.status,
   };
 }
 
 export default function MentorOutcomePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { authUser, fetchStudentDetail, handleResolveIntervention } = useSentinel();
+  const {
+    authUser,
+    fetchStudentDetail,
+    handleResolveIntervention,
+    handleReopenIntervention,
+  } = useSentinel();
   const router = useRouter();
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,14 +72,72 @@ export default function MentorOutcomePage({ params }: { params: Promise<{ id: st
     }
   }, [authUser, router]);
 
+  // Kept in a ref so `load` can stay stable: fetchStudentDetail gets a new
+  // identity on every provider render, which would otherwise re-trigger the
+  // effect (and, with `force`, loop forever).
+  const fetchDetailRef = useRef(fetchStudentDetail);
   useEffect(() => {
-    if (id) {
-      setLoading(true);
-      fetchStudentDetail(id)
-        .then(d => { if (d) setDetail(d); })
-        .finally(() => setLoading(false));
+    fetchDetailRef.current = fetchStudentDetail;
+  });
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    let student = await fetchDetailRef.current(id, { force: true });
+
+    // One-time repair: an intervention stored without a baseline would otherwise
+    // read its "before" from the moving current score.
+    if (student?.activeIntervention && typeof student.activeIntervention.baselineRiskScore !== 'number') {
+      const healed = { ...student.activeIntervention, baselineRiskScore: student.riskScore };
+      try {
+        await fetch(`/api/students/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activeIntervention: healed }),
+        });
+      } catch (e) {
+        console.error('Failed to persist intervention baseline', e);
+      }
+      student = { ...student, activeIntervention: healed };
     }
-  }, [id, fetchStudentDetail]);
+
+    setDetail(student);
+    setLoading(false);
+  }, [id]);
+
+  // Reload the student record whenever it changes on the server AND after the
+  // outcome view has had a chance to render the optimistic local state.
+  const [, forceLoad] = useReducer((n: number) => n + 1, 0);
+  const outcomeStatusRef = useRef<string>('');
+  useEffect(() => {
+    outcomeStatusRef.current = detail?.activeIntervention?.status ?? '';
+  }, [detail?.activeIntervention?.status]);
+  useEffect(() => {
+    if (detail?.activeIntervention) {
+      const current = outcomeStatusRef.current;
+      const next = detail.activeIntervention.status;
+      if (current !== next) {
+        forceLoad();
+      }
+    }
+  }, [detail?.activeIntervention?.status]);
+
+  useEffect(() => {
+    load();
+  }, [load]);  const handleResolve = async (studentId: string) => {
+    await handleResolveIntervention(studentId);
+    // Let the optimistic UI render first, then verify against the real store.
+    await new Promise((r) => setTimeout(r, 350));
+    const fresh = await fetchStudentDetail(studentId, { force: true });
+    if (fresh) setDetail(fresh);
+  };
+
+  const handleReopen = async (studentId: string) => {
+    await handleReopenIntervention(studentId);
+    await new Promise((r) => setTimeout(r, 350));
+    const fresh = await fetchStudentDetail(studentId, { force: true });
+    if (fresh) setDetail(fresh);
+  };
 
   if (!authUser || authUser.role !== 'mentor') return null;
 
@@ -116,7 +183,8 @@ export default function MentorOutcomePage({ params }: { params: Promise<{ id: st
       <OutcomeComparisonView
         data={outcomeData}
         onBack={() => router.push(`/dashboard/student/${id}`)}
-        onResolveIntervention={handleResolveIntervention}
+        onResolveIntervention={handleResolve}
+        onReopenIntervention={handleReopen}
       />
     </div>
   );

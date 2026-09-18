@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AuthUser } from '@/views/LoginView';
 import { StudentSummary, StudentDetail, UploadLog, MentorActionPayload, OutcomeComparisonData } from '@/lib/types';
 import { computeRiskScore, generateFallbackExplanation, RawStudentData } from '@/lib/riskEngine';
+import { buildSnapshot, planUploadRevert, affectedStudentIds } from '@/lib/uploadRevert';
 
 interface SentinelContextType {
   authUser: AuthUser | null;
@@ -15,12 +16,13 @@ interface SentinelContextType {
   uploadHistory: UploadLog[];
   setUploadHistory: React.Dispatch<React.SetStateAction<UploadLog[]>>;
   detailsMap: Record<string, StudentDetail>;
-  fetchStudentDetail: (id: string) => Promise<StudentDetail | null>;
-  handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => { success: boolean; updatedCount: number; skippedCount: number };
+  fetchStudentDetail: (id: string, opts?: { force?: boolean }) => Promise<StudentDetail | null>;
+  handleDataUpload: (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string) => Promise<{ success: boolean; updatedCount: number; skippedCount: number }>;
   handleClearAllData: () => void;
-  handleDeleteUpload: (uploadedAt: string) => void;
+  handleDeleteUpload: (uploadedAt: string) => Promise<void>;
   handleInterventionAssigned: (payload: MentorActionPayload) => Promise<void>;
   handleResolveIntervention: (studentId: string) => Promise<void>;
+  handleReopenIntervention: (studentId: string) => Promise<void>;
 }
 
 const SentinelContext = createContext<SentinelContextType | undefined>(undefined);
@@ -73,8 +75,8 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('ea_authUser');
   };
 
-  const fetchStudentDetail = async (id: string) => {
-    if (detailsMap[id]) return detailsMap[id];
+  const fetchStudentDetail = async (id: string, opts?: { force?: boolean }) => {
+    if (!opts?.force && detailsMap[id]) return detailsMap[id];
     try {
       const res = await fetch(`/api/students/${id}`);
       const data = await res.json();
@@ -88,8 +90,33 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
     return null;
   };
 
-  const handleDataUpload = (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string): { success: boolean; updatedCount: number; skippedCount: number } => {
-    const newDetails = { ...detailsMap };
+  const handleDataUpload = async (parsedData: any[], weekLabel: string, uploadType: import('@/lib/types').UploadType, fileName?: string): Promise<{ success: boolean; updatedCount: number; skippedCount: number }> => {
+    // The client-side detail cache is lazy — make sure we hold each affected
+    // student's FULL record from the server before applying changes. Otherwise a
+    // student we have never opened would be replaced by an empty stub, wiping
+    // their attendance, grades and backlogs.
+    const affectedIds = Array.from(new Set(
+      parsedData
+        .map(row => (typeof row?.studentId === 'string' ? row.studentId.trim() : ''))
+        .filter(Boolean)
+    ));
+
+    const missingIds = affectedIds.filter(sid => !detailsMap[sid]);
+    const preloaded: Record<string, StudentDetail> = {};
+    if (missingIds.length > 0) {
+      await Promise.all(missingIds.map(async (sid) => {
+        try {
+          const res = await fetch(`/api/students/${sid}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data?.student) preloaded[sid] = data.student as StudentDetail;
+        } catch {
+          // Leave it missing — it will be treated as a brand-new student
+        }
+      }));
+    }
+
+    const newDetails = { ...detailsMap, ...preloaded };
     const newStudents = [...students];
     let updatedCount = 0;
     let skippedCount = 0;
@@ -104,18 +131,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
 
       // Save snapshot of original state before any modifications
       if (newDetails[sid] && !snapshots[sid]) {
-        const orig = newDetails[sid];
-        snapshots[sid] = {
-          attendanceHistory: JSON.parse(JSON.stringify(orig.attendanceHistory || [])),
-          subjectAttendance: JSON.parse(JSON.stringify(orig.subjectAttendance || [])),
-          termTests: JSON.parse(JSON.stringify(orig.termTests || [])),
-          backlogCount: orig.backlogCount ?? 0,
-          backlogSubjects: JSON.parse(JSON.stringify(orig.backlogSubjects || [])),
-          feeOverdueDays: orig.feeOverdueDays ?? 0,
-          feeStatus: orig.feeStatus || 'Paid',
-          lastSemResult: JSON.parse(JSON.stringify(orig.lastSemResult || { score: 0, maxMarks: 0 })),
-          endSemResult: JSON.parse(JSON.stringify(orig.endSemResult || { status: 'Upcoming' })),
-        };
+        snapshots[sid] = buildSnapshot(newDetails[sid]);
       }
 
       if (!newDetails[sid]) {
@@ -176,7 +192,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
             attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
             backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: existing.feeOverdueDays || 0,
-            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+            submissionRate: existing.submissionRate ?? (existing.contributingFactors.some(f => f.factor === 'Low Engagement') ? 45 : 70),
           };
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
@@ -196,7 +212,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
             attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
             backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: existing.feeOverdueDays || 0,
-            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+            submissionRate: existing.submissionRate ?? (existing.contributingFactors.some(f => f.factor === 'Low Engagement') ? 45 : 70),
           };
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
@@ -211,7 +227,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
             attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
             backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: overdue,
-            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+            submissionRate: existing.submissionRate ?? (existing.contributingFactors.some(f => f.factor === 'Low Engagement') ? 45 : 70),
           };
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
@@ -227,7 +243,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
             studentId: sid, name: existing.name, department: existing.department, year: existing.year,
             attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
             backlogs: count, backlogSubjects: subjects, feeOverdueDays: existing.feeOverdueDays || 0,
-            submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
+            submissionRate: existing.submissionRate ?? (existing.contributingFactors.some(f => f.factor === 'Low Engagement') ? 45 : 70),
           };
           const result = computeRiskScore(raw);
           existing.riskScore = result.riskScore; existing.riskLevel = result.riskLevel; existing.contributingFactors = result.contributingFactors; existing.suggestedAction = result.suggestedAction;
@@ -297,115 +313,70 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleDeleteUpload = async (uploadedAt: string) => {
-    // Find the upload log to get the snapshot data needed for clean revert
-    const uploadLog = uploadHistory.find(log => log.uploadedAt === uploadedAt);
-    if (!uploadLog) {
-      await fetch(`/api/history?uploadedAt=${encodeURIComponent(uploadedAt)}`, { method: 'DELETE' });
-      setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
-      return;
-    }
+    const uploadLog = uploadHistory.find(log => log.uploadedAt === uploadedAt) ?? null;
 
-    const snapshots = (uploadLog as any).snapshots as Record<string, any> | null;
-    const rawData = (uploadLog as any).rawData;
+    // ── 1. Work out the restored records for this upload ────────────────────
+    let revertedStudents: StudentDetail[] = [];
+    let removedIds: string[] = [];
 
-    if (rawData && Array.isArray(rawData)) {
-      const newDetails = { ...detailsMap };
-      const newStudents = [...students];
-
-      rawData.forEach((row: any) => {
-        const sid = row.studentId?.trim();
-        if (!sid) return;
-
-        // Student was CREATED by this upload (no snapshot) — remove entirely
-        if (snapshots && snapshots[sid] === null) {
-          delete newDetails[sid];
-          const idx = newStudents.findIndex(s => s.studentId === sid);
-          if (idx !== -1) newStudents.splice(idx, 1);
-          return;
-        }
-
-        if (!newDetails[sid]) return;
-
-        const existing = { ...newDetails[sid] };
-
-        // Restore from snapshot if available (perfect revert)
-        if (snapshots && snapshots[sid]) {
-          const snap = snapshots[sid];
-          existing.attendanceHistory = JSON.parse(JSON.stringify(snap.attendanceHistory));
-          existing.subjectAttendance = JSON.parse(JSON.stringify(snap.subjectAttendance));
-          existing.termTests = JSON.parse(JSON.stringify(snap.termTests));
-          existing.backlogCount = snap.backlogCount;
-          existing.backlogSubjects = JSON.parse(JSON.stringify(snap.backlogSubjects));
-          existing.feeOverdueDays = snap.feeOverdueDays;
-          existing.feeStatus = snap.feeStatus;
-          existing.lastSemResult = JSON.parse(JSON.stringify(snap.lastSemResult));
-          existing.endSemResult = JSON.parse(JSON.stringify(snap.endSemResult));
-        } else {
-          // No snapshot — fall back to removing the specific upload entries
-          if (uploadLog.type === 'WeeklyAttendance') {
-            existing.attendanceHistory = existing.attendanceHistory.filter(h => h.week !== uploadLog.week);
-          } else if (uploadLog.type === 'UnitTest1') {
-            existing.termTests = existing.termTests.filter(t => t.testName !== 'Unit Test 1');
-          } else if (uploadLog.type === 'UnitTest2') {
-            existing.termTests = existing.termTests.filter(t => t.testName !== 'Unit Test 2');
-          } else if (uploadLog.type === 'Backlogs') {
-            existing.backlogCount = 0;
-            existing.backlogSubjects = [];
-          } else if (uploadLog.type === 'FeeStatus') {
-            existing.feeOverdueDays = 0;
-            existing.feeStatus = 'Paid';
-          } else if (uploadLog.type === 'LastSemResult') {
-            existing.lastSemResult = { score: 0, maxMarks: 0 };
-          } else if (uploadLog.type === 'EndSemResult') {
-            existing.endSemResult = { status: 'Upcoming' };
+    if (uploadLog && Array.isArray((uploadLog as any).rawData)) {
+      // Load any student we do not hold yet, same as the upload path does
+      const ids = affectedStudentIds(uploadLog);
+      const preloaded: Record<string, StudentDetail> = {};
+      await Promise.all(
+        ids.filter(sid => !detailsMap[sid]).map(async (sid) => {
+          try {
+            const res = await fetch(`/api/students/${sid}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data?.student) preloaded[sid] = data.student as StudentDetail;
+          } catch {
+            // Student may have been created by this very upload — it will be removed
           }
-        }
+        })
+      );
 
-        // Recalculate risk score from restored data
-        const raw: RawStudentData = {
-          studentId: sid, name: existing.name, department: existing.department, year: existing.year,
-          attendanceHistory: existing.attendanceHistory, subjectAttendance: existing.subjectAttendance, termTests: existing.termTests,
-          backlogs: existing.backlogCount || 0, backlogSubjects: existing.backlogSubjects || [], feeOverdueDays: existing.feeOverdueDays || 0,
-          submissionRate: existing.contributingFactors.find(f => f.factor === 'Low Engagement') ? 45 : 70,
-        };
-        const result = computeRiskScore(raw);
-        existing.riskScore = result.riskScore;
-        existing.riskLevel = result.riskLevel;
-        existing.contributingFactors = result.contributingFactors;
-        existing.suggestedAction = result.suggestedAction;
-        existing.aiExplanation = generateFallbackExplanation(
-          { name: existing.name, department: existing.department, year: existing.year }, result
-        );
-
-        newDetails[sid] = existing;
-
-        const summaryIdx = newStudents.findIndex(s => s.studentId === sid);
-        if (summaryIdx !== -1) {
-          newStudents[summaryIdx] = {
-            ...newStudents[summaryIdx],
-            riskScore: existing.riskScore,
-            riskLevel: existing.riskLevel
-          };
-        }
-      });
-
-      setDetailsMap(newDetails);
-      setStudents(newStudents);
-
-      // Sync reverted data to server
-      const studentsArray = Object.values(newDetails);
-      fetch('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(studentsArray)
-      }).catch(e => console.error('Student sync failed after revert', e));
+      const plan = planUploadRevert(uploadLog, { ...detailsMap, ...preloaded });
+      revertedStudents = plan.updated;
+      removedIds = plan.removedIds;
     }
 
-    // Delete the upload log from server and client
-    const res = await fetch(`/api/history?uploadedAt=${encodeURIComponent(uploadedAt)}`, { method: 'DELETE' });
-    if (res.ok) {
-      setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
+    // ── 2. Push the restored records back through the students API ──────────
+    // The client is the only writer the dashboard reads from, so this is what
+    // makes the delete visible everywhere (dashboard, detail pages, outcomes).
+    try {
+      if (revertedStudents.length > 0) {
+        await fetch('/api/students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(revertedStudents),
+        });
+      }
+      for (const sid of removedIds) {
+        await fetch(`/api/students/${sid}`, { method: 'DELETE' });
+      }
+    } catch (e) {
+      console.error('Failed to sync reverted students', e);
     }
+
+    // ── 3. Delete the log itself ────────────────────────────────────────────
+    try {
+      await fetch(`/api/history?uploadedAt=${encodeURIComponent(uploadedAt)}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Failed to delete upload log', e);
+    }
+
+    // ── 4. Refresh everything the UI reads from ─────────────────────────────
+    setDetailsMap({});
+
+    try {
+      const studRes = await fetch('/api/students');
+      if (studRes.ok) setStudents(await studRes.json());
+    } catch (e) {
+      console.error('Failed to refresh students after delete', e);
+    }
+
+    setUploadHistory(prev => prev.filter(log => log.uploadedAt !== uploadedAt));
   };
 
   const handleInterventionAssigned = async (payload: MentorActionPayload) => {
@@ -421,14 +392,33 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const baselineRiskScore = detailsMap[payload.studentId]?.riskScore || 0;
+    // Register the intervention server-side first: it is the authority for the
+    // baseline risk score, so the outcome store and the student record can never
+    // disagree about what "before" means.
+    let baselineRiskScore = detailsMap[payload.studentId]?.riskScore;
+    try {
+      const res = await fetch('/api/interventions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (typeof data?.baselineRiskScore === 'number') {
+        baselineRiskScore = data.baselineRiskScore;
+      }
+    } catch (e) {
+      console.error('Failed to register intervention', e);
+    }
+
+    // Last resort only if the student is unknown to both the cache and the server
+    const resolvedBaseline = baselineRiskScore ?? 0;
 
     const activeIntervention = {
       type: payload.type,
       details: payload.details,
       status: status,
       assignedDate: payload.startDate,
-      baselineRiskScore,
+      baselineRiskScore: resolvedBaseline,
     };
 
     // Update local client state immediately
@@ -442,15 +432,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       }
     }));
 
-    // Register in server-side outcome store via POST /api/interventions
-    // This is what populates outcomeStore so the Outcome Comparison page works
-    await fetch('/api/interventions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    // Also update the student's activeIntervention field via PATCH
+    // Persist the intervention (with its frozen baseline) on the student record
     await fetch(`/api/students/${payload.studentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -473,11 +455,57 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       };
     });
 
+    // Close the intervention itself, not just the summary flag — otherwise the
+    // outcome page and the student portal keep showing it as active.
+    await fetch(`/api/interventions/${studentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Resolved' })
+    }).catch((e) => console.error('Failed to resolve intervention', e));
+
     await fetch(`/api/students/${studentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interventionStatus: 'Resolved' })
+      body: JSON.stringify({
+        interventionStatus: 'Resolved',
+        ...(detailsMap[studentId]?.activeIntervention
+          ? { activeIntervention: { ...detailsMap[studentId]!.activeIntervention, status: 'Resolved' } }
+          : {}),
+      })
+    }).catch((e) => console.error('Failed to update student record on resolve', e));
+  };
+
+  const handleReopenIntervention = async (studentId: string) => {
+    setStudents(prev => prev.map(s => s.studentId === studentId ? { ...s, interventionStatus: 'Active' } : s));
+    setDetailsMap(prev => {
+      const existing = prev[studentId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [studentId]: {
+          ...existing,
+          interventionStatus: 'Active',
+          activeIntervention: existing.activeIntervention ? { ...existing.activeIntervention, status: 'Active' } : null
+        }
+      };
     });
+
+    await fetch(`/api/interventions/${studentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'Active' })
+    }).catch((e) => console.error('Failed to reopen intervention', e));
+
+    await fetch(`/api/students/${studentId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        interventionStatus: 'Active',
+        ...(detailsMap[studentId]?.activeIntervention
+          ? { activeIntervention: { ...detailsMap[studentId]!.activeIntervention, status: 'Active' } }
+          : {}),
+      })
+    }).catch((e) => console.error('Failed to update student record on reopen', e));
   };
 
   if (!isClient) return null;
@@ -489,7 +517,7 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
       uploadHistory, setUploadHistory,
       detailsMap, fetchStudentDetail,
       handleDataUpload, handleClearAllData, handleDeleteUpload,
-      handleInterventionAssigned, handleResolveIntervention
+      handleInterventionAssigned, handleResolveIntervention, handleReopenIntervention
     }}>
       {children}
     </SentinelContext.Provider>
