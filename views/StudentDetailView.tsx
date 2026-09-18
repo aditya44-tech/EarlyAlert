@@ -51,14 +51,20 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   // empty "Other" interventions, so the banner becomes informational instead.
   const noRiskFactors = (student.contributingFactors?.length ?? 0) === 0;
 
-  // Synchronize local state and auto-fetch Groq AI narrative on student view load
+  // Synchronize local state on student view load.
+  // Only auto-fetch from Groq when no explanation is stored yet (first visit
+  // or after a data upload that changed the risk score). If the student
+  // already has a persisted aiExplanation, show it immediately and let the
+  // mentor click "Refresh via Groq" explicitly if they want a new one.
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
     setIsGroqPowered(false);
     setUsedFallback(false);
     setAiModel(null);
     setGroqError(null);
-    if (lastFetchedId.current !== student.studentId) {
+    // Only fetch if: (a) we haven't fetched for this student yet AND
+    // (b) there's no stored explanation to show.
+    if (lastFetchedId.current !== student.studentId && !student.aiExplanation) {
       handleRefreshGroq();
     }
   }, [student.studentId]);
@@ -72,6 +78,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'explain',
+          studentId: student.studentId,
           studentName: student.name,
           department: student.department,
           year: student.year,
