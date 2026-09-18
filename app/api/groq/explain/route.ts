@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
 
-// Models verified to be active on the Groq API.
-// llama-3.3-70b-versatile produces the richest narrative; llama-3.1-8b-instant
-// is the fast stand-by when the primary is rate-limited.
-const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
-const FALLBACK_MODEL = 'llama-3.1-8b-instant';
+// Models verified to be active on this API key. qwen3.8-27b produces the
+// richest narrative but is the one Groq rate-limits first (HTTP 429), so the
+// fast gpt-oss model acts as the stand-by.
+const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
+const FALLBACK_MODEL = 'openai/gpt-oss-20b';
 
 // When Groq rate-limits the primary model, remember it for a short window so
 // the following narratives go straight to the stand-by model instead of paying
@@ -22,6 +22,14 @@ const MAX_RATE_LIMIT_WAIT_MS = 2_500;
 const MAX_RATE_LIMIT_RETRIES = 2;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * gpt-oss models think before answering and will happily spend the ENTIRE
+ * max_tokens budget on hidden reasoning, returning an empty `content` string.
+ * Low effort keeps the actual answer inside the budget.
+ */
+const REASONING_MODEL_PREFIXES = ['openai/gpt-oss'];
+const isReasoningModel = (model: string) => REASONING_MODEL_PREFIXES.some(p => model.startsWith(p));
 
 /** How long Groq tells us to wait before retrying a 429. */
 function retryDelayMs(res: Response): number {
@@ -81,7 +89,9 @@ async function requestNarrative(
   maxTokens: number,
   deadline: number,
 ): Promise<GroqAttempt> {
-  let res = await callGroq(model, prompt, maxTokens);
+  let reasoningEffort: 'low' | undefined = isReasoningModel(model) ? 'low' : undefined;
+
+  let res = await callGroq(model, prompt, maxTokens, reasoningEffort);
 
   // At most two extra attempts: enough to ride out a short token window without
   // holding the request open for the whole deadline budget.
@@ -91,7 +101,7 @@ async function requestNarrative(
     if (Date.now() + wait > deadline) break;
     console.warn(`[Groq] "${model}" rate-limited (429) — waiting ${wait}ms before retrying.`);
     await sleep(wait);
-    res = await callGroq(model, prompt, maxTokens);
+    res = await callGroq(model, prompt, maxTokens, reasoningEffort);
   }
 
   if (!res.ok) {
@@ -99,8 +109,21 @@ async function requestNarrative(
     return { text: '', model, status: res.status, detail };
   }
 
-  const data = await res.json();
-  const text: string = (data?.choices?.[0]?.message?.content ?? '').trim();
+  let data = await res.json();
+  let text: string = (data?.choices?.[0]?.message?.content ?? '').trim();
+
+  if (!text && reasoningEffort !== 'low') {
+    console.warn(`[Groq] "${model}" returned no content (reasoning consumed the budget) — retrying with low reasoning effort.`);
+    const retry = await callGroq(model, prompt, maxTokens, 'low');
+    if (retry.ok) {
+      const retryData = await retry.json();
+      const retryText = (retryData?.choices?.[0]?.message?.content ?? '').trim();
+      if (retryText) {
+        data = retryData;
+        text = retryText;
+      }
+    }
+  }
 
   return { text, model: data?.model ?? model, status: 200, detail: '' };
 }
