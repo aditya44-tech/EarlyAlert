@@ -38,6 +38,7 @@ export interface AttendanceHistoryItem {
   week: string;
   percentage: number;
   subjects?: SubjectAttendanceEntry[];
+  isUploaded?: boolean;
 }
 
 // Legacy type kept for backward compatibility

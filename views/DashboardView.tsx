@@ -51,15 +51,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isUploadMinimized, setIsUploadMinimized] = useState(true);
-  const [overwriteHistory, setOverwriteHistory] = useState(false);
   const [viewingRawData, setViewingRawData] = useState<{ week: string, type: string, data: any[], fileName?: string } | null>(null);
-
-  // When overwrite is toggled ON, reset the week label to Week 1
-  // so the fresh upload always starts the chart from Week 1.
-  const handleSetOverwrite = (checked: boolean) => {
-    setOverwriteHistory(checked);
-    if (checked) setWeekLabel('Week 1');
-  };
 
   // Unique departments and years
   const departments = useMemo(() => {
@@ -169,7 +161,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           // The handler loads each affected student's full record from the server
           // before applying the upload, so this is awaited.
           setIsUploading(true);
-          onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name, overwriteHistory)
+          onDataUpload(data, finalWeekLabel, uploadType, uploadedFile.name, false)
             .then((res) => {
               setIsUploading(false);
               if (res.success) {
@@ -177,16 +169,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 setUploadedFile(null);
                 // Suggest next week if it uses week labels
                 if (requiresWeek) {
-                  if (overwriteHistory) {
-                    // After overwrite (Week 1), next upload should be Week 2.
-                    // Auto-disable overwrite so subsequent uploads only append.
-                    setWeekLabel('Week 2');
-                    setOverwriteHistory(false);
-                  } else {
-                    const currentWeekMatch = weekLabel.match(/\d+/);
-                    if (currentWeekMatch) {
-                      setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
-                    }
+                  const currentWeekMatch = weekLabel.match(/\d+/);
+                  if (currentWeekMatch) {
+                    setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
                   }
                 }
               }
@@ -282,7 +267,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {!isUploadMinimized && (
-          <>
+          <React.Fragment>
             <div className="flex flex-col gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
@@ -382,21 +367,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </button>
                   )}
                 </div>
-                {uploadType === 'WeeklyAttendance' && (
-                  <div className="w-full flex justify-end mt-2">
-                    <label className="flex items-center gap-2 text-xs font-bold text-neutral-600 cursor-pointer hover:text-black transition-colors">
-                      <input 
-                        type="checkbox" 
-                        checked={overwriteHistory} 
-                        onChange={(e) => handleSetOverwrite(e.target.checked)}
-                        className="w-4 h-4 accent-[#D62828] cursor-pointer"
-                      />
-                      Overwrite entire attendance history (Clear old weeks)
-                    </label>
-                  </div>
-                )}
-                </div>
               </div>
+            </div>
 
               {/* File Selected & Message Feedback */}
               <div className="flex items-center justify-between mt-2">
@@ -476,7 +448,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
             )}
-          </>
+          </React.Fragment>
         )}
       </div>
 

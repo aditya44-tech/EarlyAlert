@@ -177,11 +177,20 @@ export function SentinelProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          const withoutThisWeek = existing.attendanceHistory.filter(h => h.week !== effectiveWeekLabel);
+          // If existing history contains un-uploaded mock entries (without isUploaded: true),
+          // filter them out so real user CSV uploads replace mock history rather than sitting alongside 4 mock weeks.
+          const currentHistory = existing.attendanceHistory || [];
+          const hasUploadedEntries = currentHistory.some(h => h.isUploaded);
+          const baseHistory = hasUploadedEntries
+            ? currentHistory
+            : currentHistory.filter(h => h.isUploaded);
+
+          const withoutThisWeek = baseHistory.filter(h => h.week !== effectiveWeekLabel);
           existing.attendanceHistory = [...withoutThisWeek, {
             week: effectiveWeekLabel,
             percentage: att,
             subjects: mergedSubjects.length > 0 ? mergedSubjects : undefined,
+            isUploaded: true,
           }];
           
           // Also update the top-level subjectAttendance with this latest data

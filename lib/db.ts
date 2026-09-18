@@ -99,14 +99,9 @@ const state: DbState = globalStore.__sentinelDb ?? (globalStore.__sentinelDb = {
   details: { ...studentDetailsMap },
   statuses: { ...studentStatusMap },
   outcomes: { ...outcomeComparisonsMap },
-  interventions: [],
+  interventions: [...INITIAL_INTERVENTIONS],
   history: [],
 });
-
-// Seed the demo intervention log once, when the shared store is first created.
-if (state.interventions.length === 0) {
-  state.interventions.push(...INITIAL_INTERVENTIONS);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB API

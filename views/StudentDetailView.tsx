@@ -44,12 +44,15 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
   const interventionResolved =
     student.interventionStatus === 'Resolved' || student.activeIntervention?.status === 'Resolved';
 
-  // Synchronize local state when a new student is loaded
+  // Synchronize local state and auto-fetch Groq AI narrative on student view load
   useEffect(() => {
     setGroqExplanation(student.aiExplanation);
     setIsGroqPowered(false);
     setGroqError(null);
-  }, [student.aiExplanation, student.studentId]);
+    if (lastFetchedId.current !== student.studentId) {
+      handleRefreshGroq();
+    }
+  }, [student.studentId]);
 
   const handleRefreshGroq = async () => {
     setIsAiLoading(true);
@@ -272,7 +275,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
               {isAiLoading && (
                 <div className="flex items-center gap-2 text-xs font-bold text-neutral-600 pt-1">
                   <RefreshCw className="w-3 h-3 animate-spin text-[#D62828]" />
-                  <span>Synthesizing live narrative via Groq (qwen/qwen3.8-27b)...</span>
+                  <span>Synthesizing live narrative via Groq (llama-3.3-70b)...</span>
                 </div>
               )}
             </div>

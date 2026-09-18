@@ -121,9 +121,8 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
     }
 
     // Use stable production-tier models that are reliably available on Groq.
-    // qwen/qwen3.8-27b was deprecated — replaced with current fast models.
     const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
-    const FALLBACK_MODEL = 'llama3-70b-8192';
+    const FALLBACK_MODEL = 'llama-3.1-8b-instant';
 
     let groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
