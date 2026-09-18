@@ -14,7 +14,43 @@ const FALLBACK_MODEL = 'openai/gpt-oss-20b';
 const RATE_LIMIT_COOLDOWN_MS = 60_000;
 let primaryCooldownUntil = 0;
 
-function callGroq(model: string, prompt: string, maxTokens: number) {
+// The free tier enforces a small sliding token window (x-ratelimit-reset-tokens
+// is typically ~1.5-2s), so a 429 is usually worth waiting out rather than
+// giving up on. Total added latency is bounded by this deadline.
+const RATE_LIMIT_WAIT_BUDGET_MS = 6_000;
+const MAX_RATE_LIMIT_WAIT_MS = 2_500;
+const MAX_RATE_LIMIT_RETRIES = 2;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * gpt-oss models think before answering and will happily spend the ENTIRE
+ * max_tokens budget on hidden reasoning, returning an empty `content` string.
+ * Low effort keeps the actual answer inside the budget.
+ */
+const REASONING_MODEL_PREFIXES = ['openai/gpt-oss'];
+const isReasoningModel = (model: string) => REASONING_MODEL_PREFIXES.some(p => model.startsWith(p));
+
+/** How long Groq tells us to wait before retrying a 429. */
+function retryDelayMs(res: Response): number {
+  const retryAfter = res.headers.get('retry-after');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000, MAX_RATE_LIMIT_WAIT_MS);
+    }
+  }
+  const reset = res.headers.get('x-ratelimit-reset-tokens'); // e.g. "1.799s"
+  if (reset) {
+    const seconds = parseFloat(reset);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1000 + 150, MAX_RATE_LIMIT_WAIT_MS);
+    }
+  }
+  return 900;
+}
+
+function callGroq(model: string, prompt: string, maxTokens: number, reasoningEffort?: 'low') {
   return fetch(GROQ_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -26,8 +62,70 @@ function callGroq(model: string, prompt: string, maxTokens: number) {
       messages: [{ role: 'user', content: prompt }],
       max_tokens: maxTokens,
       temperature: 0.4,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     }),
   });
+}
+
+interface GroqAttempt {
+  text: string;
+  model: string;
+  status: number;
+  detail: string;
+}
+
+/**
+ * Asks one model for a narrative.
+ *
+ *  • 429 → wait out the rate-limit window (bounded) and retry, instead of
+ *    failing instantly the moment a burst trips the token budget.
+ *  • empty content → the model spent its budget thinking; retry once with
+ *    reasoning suppressed.
+ *  • any other error (401/400/5xx) → fail fast, reported precisely.
+ */
+async function requestNarrative(
+  model: string,
+  prompt: string,
+  maxTokens: number,
+  deadline: number,
+): Promise<GroqAttempt> {
+  let reasoningEffort: 'low' | undefined = isReasoningModel(model) ? 'low' : undefined;
+
+  let res = await callGroq(model, prompt, maxTokens, reasoningEffort);
+
+  // At most two extra attempts: enough to ride out a short token window without
+  // holding the request open for the whole deadline budget.
+  for (let attempt = 0; attempt < MAX_RATE_LIMIT_RETRIES; attempt++) {
+    if (res.ok || res.status !== 429) break;
+    const wait = retryDelayMs(res);
+    if (Date.now() + wait > deadline) break;
+    console.warn(`[Groq] "${model}" rate-limited (429) — waiting ${wait}ms before retrying.`);
+    await sleep(wait);
+    res = await callGroq(model, prompt, maxTokens, reasoningEffort);
+  }
+
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    return { text: '', model, status: res.status, detail };
+  }
+
+  let data = await res.json();
+  let text: string = (data?.choices?.[0]?.message?.content ?? '').trim();
+
+  if (!text && reasoningEffort !== 'low') {
+    console.warn(`[Groq] "${model}" returned no content (reasoning consumed the budget) — retrying with low reasoning effort.`);
+    const retry = await callGroq(model, prompt, maxTokens, 'low');
+    if (retry.ok) {
+      const retryData = await retry.json();
+      const retryText = (retryData?.choices?.[0]?.message?.content ?? '').trim();
+      if (retryText) {
+        data = retryData;
+        text = retryText;
+      }
+    }
+  }
+
+  return { text, model: data?.model ?? model, status: 200, detail: '' };
 }
 
 /**
@@ -151,51 +249,46 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
     }
 
     const maxTokens = mode === 'rationale' ? 80 : 220;
+    const deadline = Date.now() + RATE_LIMIT_WAIT_BUDGET_MS;
 
     // Skip the primary while it is cooling down from a rate-limit response.
     const coolingDown = Date.now() < primaryCooldownUntil;
-    let model = coolingDown ? FALLBACK_MODEL : PRIMARY_MODEL;
-    let groqResponse = await callGroq(model, prompt, maxTokens);
+    const order = coolingDown ? [FALLBACK_MODEL, PRIMARY_MODEL] : [PRIMARY_MODEL, FALLBACK_MODEL];
 
-    // If the chosen model fails, retry once with the other one.
-    if (!groqResponse.ok) {
-      const errText = await groqResponse.text();
-      if (groqResponse.status === 429 && model === PRIMARY_MODEL && !coolingDown) {
+    let attempt: GroqAttempt = { text: '', model: order[0], status: 0, detail: '' };
+
+    for (const candidate of order) {
+      attempt = await requestNarrative(candidate, prompt, maxTokens, deadline);
+      if (attempt.text) break;
+
+      if (attempt.status === 429 && candidate === PRIMARY_MODEL && !coolingDown) {
         primaryCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-        console.warn(`[Groq] "${PRIMARY_MODEL}" is rate-limited (429) — using "${FALLBACK_MODEL}" for the next ${RATE_LIMIT_COOLDOWN_MS / 1000}s.`);
+        console.warn(`[Groq] "${PRIMARY_MODEL}" exhausted its rate limit — using "${FALLBACK_MODEL}" for the next ${RATE_LIMIT_COOLDOWN_MS / 1000}s.`);
       } else {
-        console.warn(`[Groq] Model "${model}" failed (${groqResponse.status}): ${errText}. Retrying with the other model.`);
+        console.warn(`[Groq] Model "${candidate}" produced no narrative (status ${attempt.status}): ${attempt.detail || 'empty content'}`);
       }
-      model = model === PRIMARY_MODEL ? FALLBACK_MODEL : PRIMARY_MODEL;
-      groqResponse = await callGroq(model, prompt, maxTokens);
     }
 
-    if (!groqResponse.ok) {
-      const errText = await groqResponse.text();
-      console.error('[Groq API Error]', groqResponse.status, errText);
+    if (!attempt.text) {
+      const rateLimited = attempt.status === 429;
+      console.error('[Groq API Error]', attempt.status, attempt.detail);
       return NextResponse.json({
         text: getFallbackText(),
         fallback: true,
-        error: 'Groq API temporary error'
-      }, { status: 200 });
-    }
-
-    const data = await groqResponse.json();
-    const text: string = data?.choices?.[0]?.message?.content?.trim() ?? '';
-    const modelUsed: string = data?.model ?? model;
-
-    if (!text) {
-      console.warn('[Groq] Empty response from model — using fallback.');
-      return NextResponse.json({
-        text: getFallbackText(),
-        fallback: true
+        error: rateLimited
+          ? 'Groq rate limit reached (429)'
+          : `Groq API error (${attempt.status || 'empty response'})`,
       }, { status: 200 });
     }
 
     // Strip any <think>...</think> tags that reasoning models may emit
-    const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    const cleanText = attempt.text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-    return NextResponse.json({ text: cleanText || getFallbackText(), model: modelUsed, powered: !!(cleanText) });
+    return NextResponse.json({
+      text: cleanText || getFallbackText(),
+      model: attempt.model,
+      powered: !!cleanText,
+    });
 
   } catch (error) {
     console.error('[API /groq/explain]', error);
@@ -206,4 +299,3 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
     }, { status: 200 });
   }
 }
-

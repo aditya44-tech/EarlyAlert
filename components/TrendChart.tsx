@@ -77,6 +77,12 @@ export const TrendChart: React.FC<TrendChartProps> = ({
     return weekSortKey(aLabel) - weekSortKey(bLabel);
   });
 
+  // A trend needs at least two readings. With one, a line chart draws nothing
+  // but a dot — which reads as "the graph is broken". Show the single reading
+  // as a level marker instead, and say why there is no line yet.
+  const singlePoint = sortedData.length === 1;
+  const singleValue = singlePoint ? Number(sortedData[0][yKey]) : NaN;
+
   const computedDomain: [number, number] = React.useMemo(() => {
     if (yDomain) return yDomain;
     if (sortedData.length === 0) return [0, 100];
@@ -173,25 +179,47 @@ export const TrendChart: React.FC<TrendChartProps> = ({
                 }
               />
             )}
-            <Area
-              type="monotone"
-              dataKey={yKey}
-              fill={`url(#areaGrad-${yKey})`}
-              stroke="none"
-              isAnimationActive={true}
-            />
+            {!singlePoint && (
+              <Area
+                type="monotone"
+                dataKey={yKey}
+                fill={`url(#areaGrad-${yKey})`}
+                stroke="none"
+                isAnimationActive={true}
+              />
+            )}
+            {/* Single reading: a level line at that value makes the number visible */}
+            {singlePoint && Number.isFinite(singleValue) && (
+              <ReferenceLine
+                y={singleValue}
+                stroke={lineColor}
+                strokeWidth={3}
+                label={{
+                  value: `${singleValue}${unit}`,
+                  fill: lineColor,
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  position: 'insideTopLeft',
+                }}
+              />
+            )}
             <Line
               type="linear"
               dataKey={yKey}
               stroke={lineColor}
               strokeWidth={3.5}
-              dot={{ r: 5, fill: '#FFFFFF', stroke: '#0D0D0D', strokeWidth: 2.5 }}
+              dot={{ r: singlePoint ? 7 : 5, fill: '#FFFFFF', stroke: '#0D0D0D', strokeWidth: 2.5 }}
               activeDot={{ r: 7, fill: lineColor, stroke: '#0D0D0D', strokeWidth: 3 }}
               isAnimationActive={true}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {singlePoint && (
+        <p className="mt-2 text-[11px] font-bold uppercase tracking-wider text-neutral-500">
+          Only 1 reading so far — the trend line appears once a second one is uploaded.
+        </p>
+      )}
     </div>
   );
 };

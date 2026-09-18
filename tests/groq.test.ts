@@ -218,6 +218,108 @@ test('a live Groq narrative reports its model and never falls back silently', as
   assert.ok(!/<think>/i.test(data.text), 'reasoning tags must be stripped before display');
 });
 
+test('a burst of concurrent narratives is absorbed by rate-limit retries', async (t) => {
+  if (!(await checkServer(t))) return;
+
+  const burst = Array.from({ length: 8 }, async (_, i) => {
+    try {
+      const res = await fetch(LIVE_SERVER, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'explain',
+          studentName: `Burst Student ${i}`,
+          department: 'Computer Science',
+          year: 4,
+          riskScore: 60 + i,
+          riskLevel: 'High',
+          contributingFactors: [{ factor: 'Attendance Decline', points: 25, reason: `Dropped to ${50 + i}%` }],
+        }),
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { fallback: true, error: `network: ${e.message}` };
+    }
+  });
+
+  const results = await Promise.all(burst);
+  const powered = results.filter(r => r?.powered).length;
+  const vague = results.filter(r => r?.fallback && /temporary error|Internal server error/i.test(r.error || ''));
+
+  // The free tier rate-limits a burst; the route must wait out the window and
+  // still answer. A vague "temporary error" hiding a 429 was the original bug.
+  assert.equal(vague.length, 0, `burst produced vague fallback errors: ${JSON.stringify(vague.slice(0, 2))}`);
+  assert.ok(
+    powered >= Math.ceil(results.length / 2),
+    `burst was not absorbed: only ${powered}/${results.length} narratives came back live`,
+  );
+});
+
+test('route waits out a 429 and retries an empty thinking-model reply instead of falling back', async () => {
+  const { POST } = await import('../app/api/groq/explain/route.ts');
+  const savedKey = process.env.GROQ_API_KEY;
+  process.env.GROQ_API_KEY = 'test-key';
+
+  const originalFetch = globalThis.fetch;
+  const calls: { model: string; reasoningEffort?: string }[] = [];
+
+  globalThis.fetch = (async (_url: any, init: any) => {
+    const sent = JSON.parse(init.body);
+    calls.push({ model: sent.model, reasoningEffort: sent.reasoning_effort });
+
+    // Preferred model is out of quota and tells us to come back quickly.
+    if (sent.model === 'qwen/qwen3.8-27b') {
+      return new Response(JSON.stringify({ error: { message: 'Rate limit reached' } }), {
+        status: 429,
+        headers: { 'x-ratelimit-reset-tokens': '0.05s' },
+      });
+    }
+
+    // Stand-by is a thinking model: without low effort it answers with nothing.
+    const content = sent.reasoning_effort === 'low' ? 'Live narrative from the stand-by model.' : '';
+    return new Response(
+      JSON.stringify({ model: sent.model, choices: [{ message: { content, reasoning: 'thinking...' } }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }) as any;
+
+  try {
+    const res = await POST(
+      new Request('http://localhost/api/groq/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'explain',
+          studentName: 'Standby Student',
+          riskScore: 70,
+          riskLevel: 'High',
+          contributingFactors: [{ factor: 'Backlogs', points: 17, reason: '3 active backlogs' }],
+        }),
+      }) as any,
+    );
+    const data = await res.json();
+
+    // Retried after the rate-limit wait rather than giving up on the first 429.
+    assert.ok(
+      calls.filter(c => c.model === 'qwen/qwen3.8-27b').length >= 2,
+      `expected a retry after waiting out the 429, got ${calls.length} call(s)`,
+    );
+    // Empty content was retried with reasoning suppressed, and that answer was used.
+    assert.ok(
+      calls.some(c => c.model === 'openai/gpt-oss-20b' && c.reasoningEffort === 'low'),
+      'expected a low-reasoning-effort retry for the thinking model',
+    );
+    assert.equal(data.powered, true, 'should serve the live stand-by narrative, not the template');
+    assert.equal(data.text, 'Live narrative from the stand-by model.');
+    assert.equal(data.model, 'openai/gpt-oss-20b');
+    assert.ok(!data.fallback);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (savedKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = savedKey;
+  }
+});
+
 test('without a key the endpoint returns a clearly-flagged deterministic fallback', async () => {
   const { POST } = await import('../app/api/groq/explain/route.ts');
   const saved = process.env.GROQ_API_KEY;
