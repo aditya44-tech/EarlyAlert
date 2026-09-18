@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
   };
 
   if (!GROQ_API_KEY) {
+    console.warn('[Groq] GROQ_API_KEY is not set — returning fallback text.');
     return NextResponse.json({
       text: getFallbackText(),
       fallback: true,
@@ -119,10 +120,10 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
       return NextResponse.json({ error: 'Invalid mode. Use "explain" or "rationale".' }, { status: 400 });
     }
 
-    // Primary model (Preview, verified on Groq docs 2025-09)
-    const PRIMARY_MODEL = 'qwen/qwen3.8-27b';
-    // Fallback to a Production-tier model if the primary fails
-    const FALLBACK_MODEL = 'llama-3.3-70b-versatile';
+    // Use stable production-tier models that are reliably available on Groq.
+    // qwen/qwen3.8-27b was deprecated — replaced with current fast models.
+    const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
+    const FALLBACK_MODEL = 'llama3-70b-8192';
 
     let groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -172,13 +173,17 @@ Write a single, concise sentence (max 30 words) explaining WHY this specific int
     const modelUsed: string = data?.model ?? PRIMARY_MODEL;
 
     if (!text) {
+      console.warn('[Groq] Empty response from model — using fallback.');
       return NextResponse.json({
         text: getFallbackText(),
         fallback: true
       }, { status: 200 });
     }
 
-    return NextResponse.json({ text, model: modelUsed, powered: true });
+    // Strip any <think>...</think> tags that reasoning models may emit
+    const cleanText = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    return NextResponse.json({ text: cleanText || getFallbackText(), model: modelUsed, powered: !!(cleanText) });
 
   } catch (error) {
     console.error('[API /groq/explain]', error);

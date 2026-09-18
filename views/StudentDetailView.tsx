@@ -247,7 +247,7 @@ export const StudentDetailView: React.FC<StudentDetailViewProps> = ({
             {isGroqPowered && !isAiLoading && (
               <span className="flex items-center gap-1 text-[10px] font-black bg-[#0D0D0D] text-[#F4C430] px-1.5 py-0.5 border border-[#0D0D0D]">
                 <Zap className="w-2.5 h-2.5" />
-                GROQ · qwen/qwen3.8-27b
+                GROQ · llama-3.3-70b
               </span>
             )}
           </div>

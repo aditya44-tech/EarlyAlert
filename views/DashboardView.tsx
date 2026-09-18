@@ -54,6 +54,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [overwriteHistory, setOverwriteHistory] = useState(false);
   const [viewingRawData, setViewingRawData] = useState<{ week: string, type: string, data: any[], fileName?: string } | null>(null);
 
+  // When overwrite is toggled ON, reset the week label to Week 1
+  // so the fresh upload always starts the chart from Week 1.
+  const handleSetOverwrite = (checked: boolean) => {
+    setOverwriteHistory(checked);
+    if (checked) setWeekLabel('Week 1');
+  };
+
   // Unique departments and years
   const departments = useMemo(() => {
     const set = new Set(students.map((s) => s.department));
@@ -170,9 +177,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 setUploadedFile(null);
                 // Suggest next week if it uses week labels
                 if (requiresWeek) {
-                  const currentWeekMatch = weekLabel.match(/\d+/);
-                  if (currentWeekMatch) {
-                    setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
+                  if (overwriteHistory) {
+                    // After overwrite (Week 1), next upload should be Week 2.
+                    // Auto-disable overwrite so subsequent uploads only append.
+                    setWeekLabel('Week 2');
+                    setOverwriteHistory(false);
+                  } else {
+                    const currentWeekMatch = weekLabel.match(/\d+/);
+                    if (currentWeekMatch) {
+                      setWeekLabel(`Week ${parseInt(currentWeekMatch[0]) + 1}`);
+                    }
                   }
                 }
               }
@@ -374,7 +388,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <input 
                         type="checkbox" 
                         checked={overwriteHistory} 
-                        onChange={(e) => setOverwriteHistory(e.target.checked)}
+                        onChange={(e) => handleSetOverwrite(e.target.checked)}
                         className="w-4 h-4 accent-[#D62828] cursor-pointer"
                       />
                       Overwrite entire attendance history (Clear old weeks)
